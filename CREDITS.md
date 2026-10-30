@@ -10,6 +10,10 @@ This is an unofficial Windows port. It does not replace, and is not endorsed by,
 - [shadPS4](https://github.com/shadps4-emu/shadPS4) and its contributors, including cuesta4, for the Vulkan renderer and the shader recompiler.
 - [AzaharPlus, shadPS4Plus](https://github.com/AzaharPlus/shadPS4Plus). PKG extraction. GPL-2.0-or-later.
 
+## Windows launcher
+
+- [Grok](https://grok.com), by xAI. The Windows launcher, its page, and the documents in this branch were written with Grok. The runtime was not rewritten by it. See [AI.md](AI.md).
+
 ## Libraries in the Windows build
 
 - [AMD FidelityFX Super Resolution](https://gpuopen.com/fidelityfx-super-resolution/). The FSR4 v07 model assets shipped beside the runtime carry their own notice, `fsr4_shaders/LICENSE-FSR4-v07.txt`. That notice identifies them as MIT, copyright 2025 Advanced Micro Devices, Inc., taken from revision `01446e6a74888bf349652fcf2cbf5f642d30c2bf` of `WinLinux1028/FidelityFX-SDK_WithFSR4`, through the Q2RTX shader build. The notice stays with the files.
