@@ -25,6 +25,9 @@
 #include "../ps4rtgpu.h"
 #include "common/elf_info.h"
 #include "common/logging/log.h"
+#ifdef _WIN32
+#include "common/ntapi.h"
+#endif
 #include "core/libraries/kernel/orbis_error.h"
 #include "core/libraries/libs.h"
 #include "core/memory.h"
@@ -220,6 +223,9 @@ static void StartProfileWriter() {
 #endif
 
 extern "C" int ps4rtgpu_init(const Ps4RtGpuConfig* config) {
+#ifdef _WIN32
+    Common::NtApi::Initialize();
+#endif
     const char* bc6_decode = std::getenv("PS4RT_BC6_FLOAT");
     const char* wqm_helpers = std::getenv("PS4RT_WQM_HELPERS");
 
