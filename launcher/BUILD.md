@@ -10,4 +10,20 @@ The packaged program does not look in this folder. Next to `Kagekidan.exe` it ex
 - `scripts/brand/`
 - `media/theme.mp3`
 
-`Kagekidan.exe` is not in this commit. The exact compile command used for the test build was not kept, so it is not written here as if it were reproducible.
+## Command
+
+This command compiles the source in this folder. It was run on 30 October 2026 with LLVM MinGW Clang 21.1.3, target `x86_64-w64-windows-gnu`. The same compiler name is embedded in the 29 October test executable. The two files are not byte-identical. The test executable is 1,466,368 bytes. This command produces a larger file because `-g` and `-static` are written down here, not recovered from the old binary.
+
+The Windows libraries it links are the ones the test executable imports: `WS2_32`, `ole32`, `SHELL32`, `SHLWAPI`, `USER32`, `VERSION`, `ADVAPI32`, `KERNEL32`. There is no `libc++.dll`.
+
+```
+x86_64-w64-mingw32-clang++ -std=c++17 -O2 -g -static -mwindows \
+  -I<webview>/core/include \
+  -I<WebView2>/build/native/include \
+  kagekidan.cc -o Kagekidan.exe \
+  -lws2_32 -lole32 -lshell32 -lshlwapi -luser32 -lversion -luuid -ladvapi32
+```
+
+`<webview>/core/include` is the directory that contains `webview/webview.h`, from the webview repository. `<WebView2>/build/native/include` is the native include directory of the Microsoft WebView2 package. It must contain `WebView2.h` and `EventToken.h`. Without `EventToken.h` the build stops.
+
+`Kagekidan.exe` is still not in this commit.
