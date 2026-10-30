@@ -23,9 +23,11 @@ Le détail est dans [INSTALL.md](INSTALL.md). En bref :
 
 ## Lanceur
 
-La boucle de pétales et le mot font partie du lanceur. **華撃団** est à la place du monogramme K. Le thème par défaut est notre exécution de *さくらさくら*, mélodie traditionnelle de koto publiée en 1888, domaine public. Le fichier est synthétisé. Ce n’est pas un disque d’époque. Remplacez `media/theme.mp3` si vous voulez autre chose. Le thème s’arrête au lancement du jeu.
-
 L’anglais est la langue du lanceur. Le bouton EN passe au français.
+
+## Crédits
+
+Le runtime est celui de [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). Le lanceur Windows, sa page et ces textes ont été écrits avec [Grok](https://grok.com), par xAI. Voir [CREDITS.md](CREDITS.md) et [AI.md](AI.md).
 
 ## Licence
 
