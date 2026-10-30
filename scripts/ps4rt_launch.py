@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import subprocess
 import sys
 from prepare import load_sfo, prepare
 from link_modules import link
@@ -20,6 +21,22 @@ from patch_assembly import incomplete_marker
 
 ROOT = Path(__file__).resolve().parent.parent
 TITLE_ID_PATTERN = re.compile(r'CUSA\d{5}\Z')
+
+
+def quote_command(args) -> str:
+    if os.name == 'nt':
+        return subprocess.list2cmdline([str(part) for part in args])
+    return shlex.join([str(part) for part in args])
+
+
+def runtime_binary() -> Path:
+    names = ('ps4rt.exe', 'ps4rt') if os.name == 'nt' else ('ps4rt',)
+    for folder in (ROOT / 'bin', ROOT / 'out'):
+        for name in names:
+            candidate = folder / name
+            if candidate.is_file():
+                return candidate
+    return ROOT / 'bin' / ('ps4rt.exe' if os.name == 'nt' else 'ps4rt')
 
 
 def _restart_after_setup(args, game: Path, *, include_dlc_pkgs: bool, stage: str) -> None:
@@ -90,9 +107,8 @@ def main(argv=None) -> int:
             print(f'Installed {len(added)} new DLC package(s); restart to activate.')
             return DLC_INSTALLED_EXIT if added else 0
         return add_dlc_dialog(ROOT, pkg_tool=args.pkg_tool)
-    # Developer build: out/ps4rt. Audited portable releases: bin/ps4rt.
-    portable = ROOT / 'bin/ps4rt'
-    runtime = portable if portable.is_file() else ROOT / 'out/ps4rt'
+    # Developer build: out/ps4rt. Audited portable releases: bin/ps4rt(.exe).
+    runtime = runtime_binary()
     if not args.prepare_only and not runtime.is_file():
         parser.error('Build the runtime first: bash build.sh')
     # Only a successful v1.00 installation or interrupted-update recovery
@@ -172,9 +188,10 @@ def main(argv=None) -> int:
                '--game', str(original_game), '--no-dialogs']
     if args.dlc:
         restart += ['--dlc', str(args.dlc.expanduser().resolve())]
-    env['PS4RT_RESTART_COMMAND'] = shlex.join(restart)
+    env['PS4RT_RESTART_COMMAND'] = quote_command(restart)
     env['PS4RT_GPU_USER_DIR'] = str(gpu_user)
     env['PS4RT_CONFIG'] = str(out / 'ps4rt.ini')
+    env.setdefault('PS4RT_FSR4_DIR', str(ROOT / 'fsr4_shaders'))
     if args.upscaler is not None:
         env['PS4RT_UPSCALER'] = args.upscaler
     if args.output_resolution is not None:
