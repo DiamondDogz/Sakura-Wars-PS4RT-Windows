@@ -84,10 +84,18 @@ void runtime_file_configure(const char *app0,const char *user) {
     runtime_file_mount("/app0",app0);
     runtime_file_mount("/hostapp",app0);
     const char *writable[]={"temp0","download0","data"};
+#ifdef _WIN32
+    mkdir(user);
+#else
     mkdir(user,0755);
+#endif
     for (int i=0;i<3;++i) {
         snprintf(path,sizeof(path),"%s/%s",user,writable[i]);
+#ifdef _WIN32
+        mkdir(path);
+#else
         mkdir(path,0755);
+#endif
         char guest[32]; snprintf(guest,sizeof(guest),"/%s",writable[i]);
         runtime_file_mount(guest,path);
     }
@@ -389,7 +397,11 @@ static int64_t path_op(const char *guest,int op,int mode) {
     char path[1024];
     int e=translate(guest,path,sizeof(path));
     if (e) return -e;
+#ifdef _WIN32
+    int r= op==0 ? mkdir(path) : op==1 ? rmdir(path) : unlink(path);
+#else
     int r= op==0 ? mkdir(path,mode ? mode : 0755) : op==1 ? rmdir(path) : unlink(path);
+#endif
     return r ? -errno : 0;
 }
 static int64_t do_rename(const char *from,const char *to) {
