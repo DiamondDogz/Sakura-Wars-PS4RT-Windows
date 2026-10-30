@@ -10,8 +10,9 @@ This is an unofficial Windows port. It does not replace, and is not endorsed by,
 - [shadPS4](https://github.com/shadps4-emu/shadPS4) and its contributors, including cuesta4, for the Vulkan renderer and the shader recompiler.
 - [AzaharPlus, shadPS4Plus](https://github.com/AzaharPlus/shadPS4Plus). PKG extraction. GPL-2.0-or-later.
 
-## Windows launcher
+## Windows port
 
+- Published by [DiamondDogz](https://github.com/DiamondDogz). This is the Windows packaging and the launcher around the v1.0 runtime. It is not a claim on the runtime, and not a claim on the game.
 - [Grok](https://grok.com), by xAI. The Windows launcher, its page, and the documents in this branch were written with Grok. The runtime was not rewritten by it. See [AI.md](AI.md).
 
 ## Libraries in the Windows build
@@ -38,4 +39,4 @@ This is an unofficial Windows port. It does not replace, and is not endorsed by,
 
 ## Release
 
-The release `windows-1.0` is this branch. Its notes give the SHA-256 of the player archive. `Kagekidan.exe` is unsigned. Say so. Do not tell people to disable their antivirus.
+The release [windows-1.0](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.0) is the player archive for this branch. Its notes give the SHA-256. That archive starts CUSA16429 at game version 01.01. `Kagekidan.exe` is unsigned. Do not tell people to disable their antivirus.
