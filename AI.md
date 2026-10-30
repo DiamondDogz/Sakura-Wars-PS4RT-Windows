@@ -24,6 +24,10 @@ The Windows launcher, its page, the install text, and the wiring around the exis
 
 The runtime is not an AI rewrite of Sakura-Wars-PS4RT. It is HekamiAeon's program, built for Windows from the v1.0 line. Credit for that program stays with HekamiAeon and the people named in [CREDITS.md](CREDITS.md).
 
+## Take it or leave it
+
+The publisher’s words: yes, a lot of this is AI slop. Take it or leave it. The path to a build that starts the game was long, and Grok made that path painful. Still a good shoggoth.
+
 ## What AI was not allowed to supply
 
 - The game, or any instruction for obtaining it illegally.
