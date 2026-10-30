@@ -398,6 +398,7 @@ static int64_t path_op(const char *guest,int op,int mode) {
     int e=translate(guest,path,sizeof(path));
     if (e) return -e;
 #ifdef _WIN32
+    (void)mode;
     int r= op==0 ? mkdir(path) : op==1 ? rmdir(path) : unlink(path);
 #else
     int r= op==0 ? mkdir(path,mode ? mode : 0755) : op==1 ? rmdir(path) : unlink(path);

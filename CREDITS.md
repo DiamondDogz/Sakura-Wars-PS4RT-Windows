@@ -40,6 +40,6 @@ This is an unofficial Windows port. It does not replace, and is not endorsed by,
 
 The v1.0 commit is pinned above. These are still open.
 
-1. The Windows build of `ps4rt.exe` has to be produced from the source on `windows`, and any patch required for that build has to be committed on that branch before the binary is published.
+1. `bin/ps4rt.exe` and `Kagekidan.exe` are built from this branch by [scripts/build_windows.sh](scripts/build_windows.sh). The libraries beside `ps4rt.exe` are the ones that executable imports. Windows system libraries are not included.
 2. Publish the SHA-256 of the archive in the release notes.
 3. `Kagekidan.exe` is unsigned. Say so. Do not tell people to disable their antivirus.

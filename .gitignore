@@ -16,6 +16,11 @@
 !/packaging/
 !/tools/
 !/patches/
+!/Kagekidan.exe
+!/bin/
+!/bin/**
+!/python/
+!/python/**
 
 # Game files, saves, generated outputs and build trees at any depth.
 **/out/

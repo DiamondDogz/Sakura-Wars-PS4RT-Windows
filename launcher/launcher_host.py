@@ -62,8 +62,16 @@ def save_state(state):
     STATE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def media_dir():
+    packaged = ROOT / "media"
+    names = ("theme.mp3", "hero.jpg", "hero.png", "hero.webp")
+    if any((packaged / name).is_file() for name in names):
+        return packaged
+    return Path(__file__).resolve().parent / "media"
+
+
 def media_info():
-    folder = ROOT / "media"
+    folder = media_dir()
     hero = next((name for name in ("hero.jpg", "hero.png", "hero.webp") if (folder / name).is_file()), "")
     return {"hero": hero, "track": (folder / "theme.mp3").is_file()}
 
@@ -216,7 +224,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/media/"):
             name = path.rsplit("/", 1)[-1]
             kind = MEDIA.get(name)
-            file = ROOT / "media" / name
+            file = media_dir() / name
             if kind and file.is_file():
                 body = file.read_bytes()
                 self.send_response(200)

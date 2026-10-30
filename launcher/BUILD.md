@@ -26,4 +26,4 @@ x86_64-w64-mingw32-clang++ -std=c++17 -O2 -g -static -mwindows \
 
 `<webview>/core/include` is the directory that contains `webview/webview.h`, from the webview repository. `<WebView2>/build/native/include` is the native include directory of the Microsoft WebView2 package. It must contain `WebView2.h` and `EventToken.h`. Without `EventToken.h` the build stops.
 
-`Kagekidan.exe` is still not in this commit.
+`Kagekidan.exe` at the repository root is the output of this command. The Windows runtime is rebuilt by [scripts/build_windows.sh](../scripts/build_windows.sh).

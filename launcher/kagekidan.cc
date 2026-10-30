@@ -51,6 +51,7 @@ static HANDLE start_host(const std::wstring& dir) {
   std::wstring python = dir + L"\\python\\pythonw.exe";
   if (!fs::exists(python)) python = dir + L"\\python\\python.exe";
   std::wstring script = dir + L"\\scripts\\launcher_host.py";
+  if (!fs::exists(script)) script = dir + L"\\launcher\\launcher_host.py";
   std::wstring command = L"\"" + python + L"\" \"" + script + L"\" --no-browser";
   std::vector<wchar_t> mutable_command(command.begin(), command.end());
   mutable_command.push_back(L'\0');
