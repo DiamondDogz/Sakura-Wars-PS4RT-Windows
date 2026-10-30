@@ -11,6 +11,7 @@ import re
 import shlex
 import subprocess
 import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from prepare import load_sfo, prepare
 from link_modules import link
 from content_profile import prepare as prepare_content
