@@ -97,3 +97,21 @@ ln -sfn "$CRYPTOPP_SRC" "$cryptopp_out/include/cryptopp"
   "$MSYS_PREFIX/lib/libz.a" \
   -static -o bin/ps4rt-pkg.exe
 
+python3 - << 'PY'
+import struct
+from pathlib import Path
+for path in Path("bin").glob("*"):
+    if path.suffix.lower() not in {".exe", ".dll"}:
+        continue
+    data = bytearray(path.read_bytes())
+    if data[:2] != b"MZ":
+        continue
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    off = pe + 24 + 70
+    flags = struct.unpack_from("<H", data, off)[0]
+    if flags & 0x20:
+        struct.pack_into("<H", data, off, flags & ~0x20)
+        path.write_bytes(data)
+PY
+
+
