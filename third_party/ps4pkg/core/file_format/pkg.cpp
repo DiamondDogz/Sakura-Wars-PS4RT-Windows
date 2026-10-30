@@ -153,6 +153,7 @@ bool PKG::Extract(const std::filesystem::path& filepath, const std::filesystem::
               << " table_offset=" << offset << " entries=" << n_files
               << " pfs_offset=" << static_cast<u64>(pkgheader.pfs_image_offset)
               << " pfs_cache_size=" << static_cast<u32>(pkgheader.pfs_cache_size));
+    std::cerr << "PS4RT PKG: reading entry table (" << n_files << " entries)\n" << std::flush;
 
     std::array<u8, 64> concatenated_ivkey_dk3;
     std::array<u8, 32> seed_digest;
@@ -221,6 +222,7 @@ bool PKG::Extract(const std::filesystem::path& filepath, const std::filesystem::
 
             PKG_TRACE("entry_keys loaded; deriving DK3");
             PKG::crypto.RSA2048Decrypt(dk3_, key1[3], true); // decrypt DK3
+            std::cerr << "PS4RT PKG: update key derived\n" << std::flush;
             PKG_TRACE("DK3 derivation complete");
         } else if (entry.id == 0x20) {                       // IMAGE_KEY, seek; IV_KEY
             file.Seek(entry.offset);
@@ -236,6 +238,7 @@ bool PKG::Extract(const std::filesystem::path& filepath, const std::filesystem::
             // ekpfs key to get data and tweak keys.
             PKG_TRACE("image_key loaded; deriving PFS key");
             PKG::crypto.RSA2048Decrypt(ekpfsKey, imgKey, false);
+            std::cerr << "PS4RT PKG: filesystem key derived\n" << std::flush;
             PKG_TRACE("PFS key derivation complete");
         } else if (entry.id == 0x80) {
             // GENERAL_DIGESTS, seek;
@@ -309,6 +312,7 @@ bool PKG::Extract(const std::filesystem::path& filepath, const std::filesystem::
         // Decrypt the pfs_image.
         std::vector<u8> pfs_decrypted(length);
         PKG::crypto.decryptPFS(dataKey, tweakKey, pfs_encrypted, pfs_decrypted, 0);
+        std::cerr << "PS4RT PKG: filesystem header decrypted\n" << std::flush;
 
         // Validate PFSC before any copy. Upstream's missing-magic sentinel
         // would otherwise underflow the length and read outside the buffer.
