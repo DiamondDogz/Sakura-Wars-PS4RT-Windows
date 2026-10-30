@@ -82,8 +82,13 @@ void runtime_savedata_configure(const char *title) {
 static int make_dirs(const char *path) {
     char buffer[700];
     snprintf(buffer,sizeof(buffer),"%s",path);
+#ifdef _WIN32
+    for (char *p=buffer+1;*p;++p) if (*p=='/') { *p=0; mkdir(buffer); *p='/'; }
+    return mkdir(buffer) && errno!=EEXIST ? -1 : 0;
+#else
     for (char *p=buffer+1;*p;++p) if (*p=='/') { *p=0; mkdir(buffer,0755); *p='/'; }
     return mkdir(buffer,0755) && errno!=EEXIST ? -1 : 0;
+#endif
 }
 static void root(int32_t user, const char *title, char *out, size_t size) {
     snprintf(out,size,"%s/savedata/%d/%s",runtime_file_user_dir(),user,title && *title ? title : title_id);
