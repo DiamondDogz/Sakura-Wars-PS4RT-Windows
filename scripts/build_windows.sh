@@ -5,7 +5,7 @@
 #   MINGW_ROOT   LLVM MinGW prefix
 #   MSYS_PREFIX  mingw64 prefix
 #   GLSLANG      host glslangValidator
-#   WEBVIEW_INCLUDE and WV2_INCLUDE for Kagekidan.exe
+#   CRYPTOPP_SRC unpacked Crypto++ 8.9 (tag CRYPTOPP_8_9_0), for bin/ps4rt-pkg.exe
 set -euo pipefail
 cd -- "$(dirname -- "$0")/.."
 : "${MINGW_ROOT:?Set MINGW_ROOT}"
@@ -54,3 +54,46 @@ if [[ -n ${WEBVIEW_INCLUDE:-} && -n ${WV2_INCLUDE:-} ]]; then
     launcher/kagekidan.cc -o Kagekidan.exe \
     -lws2_32 -lole32 -lshell32 -lshlwapi -luser32 -lversion -luuid -ladvapi32
 fi
+
+# PKG extractor. CRYPTOPP_SRC is an unpacked Crypto++ 8.9 tree (tag CRYPTOPP_8_9_0).
+# The MinGW package of Crypto++ is libstdc++ and does not link with this Clang.
+: "${CRYPTOPP_SRC:?Set CRYPTOPP_SRC to Crypto++ 8.9 sources}"
+cryptopp_out=out/cryptopp-windows
+rm -rf "$cryptopp_out"
+mkdir -p "$cryptopp_out"
+python3 - "$CRYPTOPP_SRC" "$cryptopp_out" << 'PY'
+import subprocess, sys, pathlib, os
+src, out = map(pathlib.Path, sys.argv[1:])
+skip_prefix = ("test", "bench", "validat", "regtest")
+skip_name = {"datatest.cpp", "cryptlib_bds.cpp", "fipstest.cpp", "adhoc.cpp"}
+files = [p for p in sorted(src.glob("*.cpp"))
+         if p.name not in skip_name and not p.name.startswith(skip_prefix)]
+cmd = ["x86_64-w64-mingw32-clang++", "-std=c++17", "-O2", "-DNDEBUG", "-DCRYPTOPP_DISABLE_ASM", "-c"]
+jobs = os.cpu_count() or 4
+running = []
+for path in files:
+    running.append(subprocess.Popen(cmd + [str(path), "-o", str(out / (path.stem + ".o"))], cwd=src))
+    if len(running) >= jobs:
+        code = running.pop(0).wait()
+        if code:
+            raise SystemExit(code)
+for proc in running:
+    code = proc.wait()
+    if code:
+        raise SystemExit(code)
+subprocess.check_call(["x86_64-w64-mingw32-llvm-ar", "rcs", str(out / "libcryptopp.a"),
+                       *map(str, sorted(out.glob("*.o")))])
+PY
+"$CC" -O2 -c scripts/cryptopp_win_cpu.c -o "$cryptopp_out/cryptopp_win_cpu.o"
+mkdir -p "$cryptopp_out/include"
+ln -sfn "$CRYPTOPP_SRC" "$cryptopp_out/include/cryptopp"
+"$CXX" -std=c++23 -O2 \
+  -I"$cryptopp_out/include" -I"$MSYS_PREFIX/include" -Ithird_party/ps4pkg \
+  scripts/ps4rt_pkg_native.cpp \
+  third_party/ps4pkg/core/file_format/pkg.cpp \
+  third_party/ps4pkg/core/file_format/pkg_type.cpp \
+  third_party/ps4pkg/core/crypto/crypto.cpp \
+  "$cryptopp_out/libcryptopp.a" "$cryptopp_out/cryptopp_win_cpu.o" \
+  "$MSYS_PREFIX/lib/libz.a" \
+  -static -o bin/ps4rt-pkg.exe
+

@@ -8,7 +8,7 @@ Non officiel. Aucun lien avec SEGA. Le jeu n’est pas inclus.
 
 ## État
 
-Une archive qui ne contient que les exécutables n’est pas une publication complète. `ps4rt.exe` dérive d’un programme sous GPL-2.0-or-later. Les sources correspondantes de ce portage Windows doivent voyager avec lui. Voir [CREDITS.md](CREDITS.md) et [AI.md](AI.md).
+Les programmes sont dans cette branche : `Kagekidan.exe`, `bin/ps4rt.exe`, `bin/ps4rt-pkg.exe`. La release `windows-1.0` porte l’archive et son empreinte SHA-256. Les sources de ce portage sont le tag correspondant.
 
 ## Installation
 

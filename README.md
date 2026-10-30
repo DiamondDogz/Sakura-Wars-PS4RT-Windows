@@ -16,7 +16,9 @@ Version française : [README.fr.md](README.fr.md).
 - `launcher/`: the source of `Kagekidan.exe`, its page, and the default theme.
 - [INSTALL.md](INSTALL.md), [CREDITS.md](CREDITS.md), and [AI.md](AI.md).
 
-`ps4rt.exe` is not in this commit. A binary of the runtime is not published until it can be rebuilt from the source in this branch.
+- `bin/ps4rt.exe`, rebuilt from this branch. The libraries it imports are in `bin/`.
+- `bin/ps4rt-pkg.exe`, the PKG extractor used for an update or DLC.
+- `Kagekidan.exe`, `python/`, and `launcher/`.
 
 ## Install
 
