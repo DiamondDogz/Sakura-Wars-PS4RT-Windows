@@ -23,6 +23,11 @@ if [[ ${PS4RT_PORTABLE_BUILD:-0} == 1 ]]; then
         "$("$CXX" -print-file-name=libstdc++.so.6)")
 fi
 compiler=${CC:-cc}
+# The Windows runtime calls src/compat_win.c. Linux does not compile it.
+win_sources=()
+if [[ ${compiler} == *mingw* ]]; then
+    win_sources=(src/compat_win.c src/compat_win_jmp.s)
+fi
 mkdir -p out/atrac9
 for source in third_party/LibAtrac9/C/src/*.c; do
     "$compiler" -std=c99 -O2 -w -c "$source" -o "out/atrac9/$(basename "${source%.c}").o"
@@ -30,7 +35,7 @@ done
 ar rcs out/libatrac9.a out/atrac9/*.o
 "$compiler" -std=c11 -O2 -Wall -Wextra -Werror -mgeneral-regs-only -c src/isa_emulate.c -o out/isa_emulate.o
 "$compiler" -std=c11 -O2 -Wall -Wextra -Werror -pthread -no-pie -DPS4RT_RUNTIME "${includes[@]}" -I. -Isrc \
-    src/loader.c src/runtime*.c src/cpu_check.c out/isa_emulate.o src/isa_rewrite.c out/libatrac9.a \
+    src/loader.c src/runtime*.c "${win_sources[@]}" src/cpu_check.c out/isa_emulate.o src/isa_rewrite.c out/libatrac9.a \
     -lm -Lout/gpu -lps4rtgpu -Wl,-rpath,'$ORIGIN/gpu' -rdynamic "${libraries[@]}" "${portable_libs[@]}" -o out/ps4rt
 if [[ ${1:-} == --test ]]; then
     ninja -C out/gpu -j "${PS4RT_BUILD_JOBS:-4}" ui-coordinates-gpu-test display-sample-gpu-test transition-snapshot-gpu-test \
