@@ -94,6 +94,8 @@ def main(argv=None) -> int:
                         help='Override the saved graphics setting for this launch')
     parser.add_argument('--output-resolution', choices=('1080', '1440', '4k'))
     args = parser.parse_args(argv)
+    if os.name == 'nt':
+        print('Kagekidan: demarrage.', flush=True)
     original_game = args.game.expanduser().resolve(strict=True)
     title_id = str(load_sfo(original_game / 'sce_sys/param.sfo').get('TITLE_ID', ''))
     if not TITLE_ID_PATTERN.fullmatch(title_id) or title_id != TITLE_ID:
@@ -204,6 +206,9 @@ def main(argv=None) -> int:
                '--timeout', '0']
     for label, root in sorted(addons.items()):
         command += ['--addcont', f'{label}={root}']
+    if os.name == 'nt':
+        # Replacing this process would close the console and take the game with it.
+        return subprocess.run(command, env=env, cwd=str(ROOT), check=False).returncode
     os.execve(str(runtime), command, env)
 
 
