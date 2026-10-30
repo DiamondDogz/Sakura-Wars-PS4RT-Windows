@@ -24,11 +24,13 @@ See [INSTALL.md](INSTALL.md). Short form: Windows 10 or 11, your own extracted C
 
 ## Launcher
 
-The petal loop and the wordmark ship with the launcher. **華撃団** is set where the monogram K used to be. The default theme is this project's performance of *さくらさくら*, a traditional koto melody published in 1888. It is public domain. The file is synthesized. It is not a historical recording. Replace `launcher/media/theme.mp3` if you want another track. The theme stops when the game starts.
-
 English is the launcher language. The EN button switches to French.
 
 `Kagekidan.exe` is not signed. SmartScreen may warn. Do not turn off Microsoft Defender.
+
+## Credits
+
+The runtime is [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). The Windows launcher, its page, and these documents were written with [Grok](https://grok.com), by xAI. See [CREDITS.md](CREDITS.md) and [AI.md](AI.md).
 
 ## License
 
