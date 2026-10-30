@@ -146,6 +146,7 @@ set(COMMON
     shadps4/common/io_file.cpp shadps4/common/native_clock.cpp shadps4/common/number_utils.cpp
     shadps4/common/path_util.cpp shadps4/common/rdtsc.cpp shadps4/common/spin_lock.cpp shadps4/common/recursive_lock.cpp
     shadps4/common/string_util.cpp shadps4/common/thread.cpp shadps4/common/signal_context.cpp
+    shadps4/common/ntapi.cpp
     shim/common/logging/log.cpp)
 file(GLOB AVPLAYER CONFIGURE_DEPENDS shadps4/core/libraries/avplayer/*.cpp)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale libswresample)
@@ -187,7 +188,7 @@ target_include_directories(ps4rtgpu PRIVATE third_party/xbyak)
 if (WIN32)
     # Guest code is entered with the System V ABI; NOMINMAX/WIN32_LEAN_AND_MEAN keep
     # <windows.h> out of the way of std::min/max and the Vulkan/SDL headers.
-    target_compile_definitions(ps4rtgpu PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_definitions(ps4rtgpu PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00 WINVER=0x0A00 FMT_HEADER_ONLY)
     target_compile_options(ps4rtgpu PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/shim/ps4rt_win_compat.h)
     target_link_libraries(ps4rtgpu PUBLIC Vulkan::Vulkan ws2_32 bcrypt ntdll synchronization winmm pdh)
 else()
