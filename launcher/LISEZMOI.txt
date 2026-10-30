@@ -1,0 +1,37 @@
+Sakura Wars PS4RT — build Windows
+=================================
+
+Compilation Windows du runtime Sakura-Wars-PS4RT (GPL-2.0, HekamiAeon).
+Ce n'est pas une version publiee par l'auteur. Le jeu n'est pas inclus.
+
+Contenu
+-------
+- Kagekidan.exe : le lanceur, a la racine. Il n'ouvre pas le navigateur.
+- bin/ps4rt.exe : le runtime, lance par le bouton Jouer
+- bin/ps4rt-pkg.exe : applique ta mise a jour 01.01
+- media/theme.mp3 : theme par defaut, execution synthetique de sakura sakura
+  (melodie traditionnelle, 1888, domaine public). Remplace le fichier
+  si tu veux le tien. Le fond anime et le logo partent avec le lanceur.
+
+Il te faut TON dossier deja extrait de Sakura Wars CUSA16429
+(eboot.bin, sce_sys, sce_module).
+
+Comment lancer
+--------------
+1. Decompresse ce zip.
+2. Double-clique sur Kagekidan.exe, a la racine. C'est le lanceur,
+   dans sa propre fenetre. Il n'ouvre pas le navigateur.
+3. Dans Chemins, choisis le dossier du jeu, le PKG 1.01, puis le dossier des DLC.
+4. Jouer ecrit ps4rt.ini et demarre le jeu. Une fenetre noire garde le journal.
+
+Il faut le runtime Microsoft Edge WebView2, deja present avec Edge
+sur Windows 10 et 11. Le jeu n'est pas inclus.
+
+
+La mise a jour modifie le dossier du jeu. Copie-le avant si tu veux
+garder la 1.00.
+
+Carte graphique : un GPU avec un pilote Vulkan recent (NVIDIA, AMD).
+Overlay en jeu : Inser ou L2+R3.
+
+Licence : LICENSE (GPL-2.0) et notices tierces du depot d'origine.
