@@ -1,14 +1,12 @@
 # Sakura-Wars-PS4RT-Windows
 
-Build Windows de [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), d’après le tag **v1.0**. Le lanceur est `Kagekidan.exe`.
+Portage Windows de [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), d’après le tag **v1.0**. Publié par [DiamondDogz](https://github.com/DiamondDogz). Le lanceur est `Kagekidan.exe`.
 
 Ce n’est pas le runtime v1.1. La v1.1 est sortie le 30 octobre 2026 et n’est pas incluse. Ce n’est pas non plus la version du jeu : le jeu doit être en **01.01**.
 
 Non officiel. Aucun lien avec SEGA. Le jeu n’est pas inclus.
 
-## État
-
-Les programmes sont dans cette branche : `Kagekidan.exe`, `bin/ps4rt.exe`, `bin/ps4rt-pkg.exe`. La release `windows-1.0` porte l’archive et son empreinte SHA-256. Les sources de ce portage sont le tag correspondant.
+Téléchargement : [windows-1.0](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.0). Cette archive démarre le jeu.
 
 ## Installation
 
@@ -27,7 +25,7 @@ L’anglais est la langue du lanceur. Le bouton EN passe au français.
 
 ## Crédits
 
-Le runtime est celui de [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). Le lanceur Windows, sa page et ces textes ont été écrits avec [Grok](https://grok.com), par xAI. Voir [CREDITS.md](CREDITS.md) et [AI.md](AI.md).
+Le runtime est celui de [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). Ce portage Windows est publié par [DiamondDogz](https://github.com/DiamondDogz). Le lanceur, sa page et ces textes ont été écrits avec [Grok](https://grok.com), par xAI. Voir [CREDITS.md](CREDITS.md) et [AI.md](AI.md).
 
 ## Licence
 

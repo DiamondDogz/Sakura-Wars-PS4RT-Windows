@@ -55,7 +55,10 @@ if [[ -n ${WEBVIEW_INCLUDE:-} && -n ${WV2_INCLUDE:-} ]]; then
     -lws2_32 -lole32 -lshell32 -lshlwapi -luser32 -lversion -luuid -ladvapi32
 fi
 
-# PKG extractor. CRYPTOPP_SRC is an unpacked Crypto++ 8.9 tree (tag CRYPTOPP_8_9_0).
+# PKG extractor. The committed bin/ps4rt-pkg.exe is the one that opens these packages.
+# A static Crypto++ rebuild has aborted with a heap corruption. Do not replace that file
+# unless the new one has been checked on a real PKG.
+# CRYPTOPP_SRC is an unpacked Crypto++ 8.9 tree (tag CRYPTOPP_8_9_0).
 # The MinGW package of Crypto++ is libstdc++ and does not link with this Clang.
 : "${CRYPTOPP_SRC:?Set CRYPTOPP_SRC to Crypto++ 8.9 sources}"
 cryptopp_out=out/cryptopp-windows

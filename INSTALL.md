@@ -15,7 +15,7 @@ This project does not provide the game, keys, firmware, or saves.
 
 ## Unpack
 
-1. Unzip the archive. The folder must be named `Sakura-Wars-PS4RT-Windows`.
+1. Unzip the archive. The folder can keep the name it already has.
 2. Do not run the program from inside the zip.
 3. `Kagekidan.exe` is at the root of that folder. Open that file.
 4. Windows SmartScreen may warn you. The executable is not signed. Choose More info, then Run anyway. Do not turn off Microsoft Defender for this.
@@ -85,7 +85,7 @@ Ce projet ne fournit ni le jeu, ni les clés, ni le firmware, ni les sauvegardes
 
 ## Décompresser
 
-1. Décompressez l’archive. Le dossier doit s’appeler `Sakura-Wars-PS4RT-Windows`.
+1. Décompressez l’archive. Le dossier peut garder le nom qu’il a déjà.
 2. Ne lancez pas le programme depuis l’intérieur du zip.
 3. `Kagekidan.exe` est à la racine. Ouvrez ce fichier.
 4. SmartScreen peut prévenir. L’exécutable n’est pas signé. Choisissez Informations complémentaires, puis Exécuter quand même. Ne désactivez pas Microsoft Defender pour cela.
@@ -106,7 +106,7 @@ La mise à jour réécrit des fichiers dans le dossier du jeu. Copiez-le d’abo
 
 Jouer écrit `ps4rt.ini` à côté du runtime et démarre `ps4rt.exe`. Le thème s’arrête. Une fenêtre de console garde le journal.
 
-En jeu, l’incrustation est Inser, ou L2+R3.
+En jeu, l’incrustation est Insert, ou L2+R3.
 
 Réglages que ce build expose vraiment :
 
