@@ -31,7 +31,12 @@ public:
 
     bool Open(const std::filesystem::path& path, FileAccessMode mode) {
         Close();
-        stream_ = std::fopen(path.c_str(), mode == FileAccessMode::Read ? "rb" : "wb");
+        const auto* mode_text = mode == FileAccessMode::Read ? "rb" : "wb";
+#ifdef _WIN32
+        stream_ = _wfopen(path.c_str(), mode == FileAccessMode::Read ? L"rb" : L"wb");
+#else
+        stream_ = std::fopen(path.string().c_str(), mode_text);
+#endif
         if (stream_) path_ = path;
         return stream_ != nullptr;
     }
