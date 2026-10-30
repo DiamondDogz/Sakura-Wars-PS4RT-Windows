@@ -17,7 +17,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include "../../../dlss_bridge/ps4rt_dlss_bridge.h"
+// ps4rt_dlss_bridge is not published with this tree. DLSS stays off; FSR still works.
 #endif
 
 namespace Vulkan {
@@ -27,9 +27,7 @@ int Dlss::QualityForScale(float scale) {
     return scale >= 2.9f ? 4 : scale >= 1.95f ? 3 : scale >= 1.65f ? 2 : scale > 1.01f ? 1 : 0;
 }
 
-#ifdef _WIN32
-
-namespace {
+#if 0 // DLSS bridge sources are not in the public tree
 constexpr wchar_t BridgeName[] = L"ps4rt_dlss.dll";
 constexpr wchar_t NgxName[] = L"nvngx_dlss.dll";
 
