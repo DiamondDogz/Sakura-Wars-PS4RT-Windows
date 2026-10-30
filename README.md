@@ -1,6 +1,6 @@
 # Sakura-Wars-PS4RT-Windows
 
-Windows launcher for [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), built from tag **v1.0**, commit `85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`. The branch that carries this work is `windows`. The default branch is newer and is not used.
+Windows launcher for [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), built from tag **v1.0**, commit `85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`. This branch, `windows`, is the default branch. `main` still holds the newer upstream line and is not the base of this work.
 
 The launcher executable is `Kagekidan.exe`.
 
