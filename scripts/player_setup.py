@@ -232,13 +232,15 @@ def _extractor(root: Path, override: str | None = None) -> str:
         if found and Path(found).is_file() and os.access(found, os.X_OK):
             return str(Path(found).resolve())
         raise SetupError(f"Configured developer PKG tool is not executable: {configured}")
-    portable = root / "bin" / "ps4rt-pkg"
-    native = portable if portable.is_file() else root / "out" / "ps4rt-pkg"
-    if native.is_file() and os.access(native, os.X_OK):
-        return str(native.resolve())
+    names = ("ps4rt-pkg.exe", "ps4rt-pkg") if os.name == "nt" else ("ps4rt-pkg",)
+    for folder in (root / "bin", root / "out"):
+        for name in names:
+            native = folder / name
+            if native.is_file() and os.access(native, os.X_OK):
+                return str(native.resolve())
     raise SetupError("PS4RT native PKG component is missing. "
-                     "Build the workspace with bash scripts/build_pkg_native.sh "
-                     "or use a portable release with bin/ps4rt-pkg already included.")
+                     "Build bin/ps4rt-pkg.exe with scripts/build_windows.sh, "
+                     "or bin/ps4rt-pkg with scripts/build_pkg_native.sh.")
 
 
 def _validate_pkg(path: Path) -> None:

@@ -36,10 +36,6 @@ This is an unofficial Windows port. It does not replace, and is not endorsed by,
 - Official key art, the opening theme, or any other SEGA recording.
 - A binary of `ps4rt.exe` published without the corresponding source of the Windows changes.
 
-## Before a public release
+## Release
 
-The v1.0 commit is pinned above. These are still open.
-
-1. `bin/ps4rt.exe` and `Kagekidan.exe` are built from this branch by [scripts/build_windows.sh](scripts/build_windows.sh). The libraries beside `ps4rt.exe` are the ones that executable imports. Windows system libraries are not included.
-2. Publish the SHA-256 of the archive in the release notes.
-3. `Kagekidan.exe` is unsigned. Say so. Do not tell people to disable their antivirus.
+The release `windows-1.0` is this branch. Its notes give the SHA-256 of the player archive. `Kagekidan.exe` is unsigned. Say so. Do not tell people to disable their antivirus.
