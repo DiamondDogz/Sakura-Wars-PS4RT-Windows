@@ -212,25 +212,8 @@ def main(argv=None) -> int:
     os.execve(str(runtime), command, env)
 
 
-def _pause_on_windows():
-    if os.name != 'nt':
-        return
-    try:
-        input('Appuyez sur Entree pour fermer.')
-    except EOFError:
-        pass
-
-
 if __name__ == '__main__':
-    code = 1
     try:
-        code = main()
+        sys.exit(main())
     except (OSError, ValueError, KeyError, RuntimeError) as error:
-        print(f'PS4RT: {error}', flush=True)
-    except SystemExit as error:
-        if isinstance(error.code, int):
-            code = error.code
-        elif error.code:
-            print(error.code, flush=True)
-    _pause_on_windows()
-    sys.exit(code if isinstance(code, int) else 1)
+        sys.exit(f'PS4RT: {error}')

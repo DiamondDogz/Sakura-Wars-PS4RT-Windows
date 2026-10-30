@@ -183,9 +183,23 @@ def launch(state):
     if output in OUTPUT_FLAG:
         command += ["--output-resolution", OUTPUT_FLAG[output]]
     flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+    bat = ROOT / "lancer-jeu.bat"
+    quoted = " ".join('"' + str(part).replace('"', '""') + '"' for part in command)
+    bat.write_text(
+        "@echo off\r\n"
+        "cd /d \"%~dp0\"\r\n"
+        "echo Kagekidan\r\n"
+        f"{quoted}\r\n"
+        "echo.\r\n"
+        "echo Fin. Code %ERRORLEVEL%\r\n"
+        "pause\r\n",
+        encoding="ascii",
+        errors="replace",
+    )
     with LOG.open("ab") as log:
         log.write(b"\n--- lancement ---\n")
-    PROCESS["handle"] = subprocess.Popen(command, cwd=str(ROOT), creationflags=flags)
+    PROCESS["handle"] = subprocess.Popen(
+        ["cmd.exe", "/c", str(bat)], cwd=str(ROOT), creationflags=flags)
 
 
 class Handler(BaseHTTPRequestHandler):
