@@ -152,6 +152,15 @@ def browse(kind):
     return {"dlc": found}
 
 
+def console_python():
+    exe = Path(sys.executable)
+    if exe.name.lower() == "pythonw.exe":
+        other = exe.with_name("python.exe")
+        if other.is_file():
+            return str(other)
+    return str(exe)
+
+
 def launch(state):
     game = str(state["paths"].get("game") or "").strip()
     if not game:
@@ -160,7 +169,7 @@ def launch(state):
         raise RuntimeError("missing-game")
     write_ini(state["settings"])
     save_state(state)
-    command = [sys.executable, str(ROOT / "scripts" / "ps4rt_launch.py"), "--game", game]
+    command = [console_python(), str(ROOT / "scripts" / "ps4rt_launch.py"), "--game", game]
     update = str(state["paths"].get("update") or "").strip()
     if update:
         command += ["--update-pkg", update]
