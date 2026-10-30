@@ -183,9 +183,6 @@ def launch(state):
     if output in OUTPUT_FLAG:
         command += ["--output-resolution", OUTPUT_FLAG[output]]
     flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-    if os.name == "nt":
-        quoted = " ".join('"' + str(part).replace('"', '""') + '"' for part in command)
-        command = "cmd.exe /d /k " + quoted
     with LOG.open("ab") as log:
         log.write(b"\n--- lancement ---\n")
     PROCESS["handle"] = subprocess.Popen(command, cwd=str(ROOT), creationflags=flags)
