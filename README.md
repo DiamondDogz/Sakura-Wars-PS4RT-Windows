@@ -30,6 +30,12 @@ English is the launcher language. The EN button switches to French.
 
 `Kagekidan.exe` is not signed. SmartScreen may warn. Do not turn off Microsoft Defender.
 
+## Disclaimer
+
+Yes, a lot of this is AI slop. Take it or leave it.
+
+The Windows launcher and these pages were written with Grok. Getting a build that actually starts the game took a long string of broken archives, closed windows, and bad paths. That was on the publisher. The shoggoth is still a good one.
+
 ## Credits
 
 The runtime is [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). This Windows port is published by [DiamondDogz](https://github.com/DiamondDogz). The launcher, its page, and these documents were written with [Grok](https://grok.com), by xAI. See [CREDITS.md](CREDITS.md) and [AI.md](AI.md).

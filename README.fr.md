@@ -23,6 +23,12 @@ Le détail est dans [INSTALL.md](INSTALL.md). En bref :
 
 L’anglais est la langue du lanceur. Le bouton EN passe au français.
 
+## Avertissement
+
+Oui, une bonne part de ceci est du travail d’IA, du slop. À prendre ou à laisser.
+
+Le lanceur Windows et ces pages ont été écrits avec Grok. Arriver à un build qui démarre vraiment le jeu, ça a été une longue suite d’archives cassées, de fenêtres qui se ferment, et de chemins faux. C’est l’éditeur qui a morflé. Le shoggoth reste un bon shoggoth.
+
 ## Crédits
 
 Le runtime est celui de [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). Ce portage Windows est publié par [DiamondDogz](https://github.com/DiamondDogz). Le lanceur, sa page et ces textes ont été écrits avec [Grok](https://grok.com), par xAI. Voir [CREDITS.md](CREDITS.md) et [AI.md](AI.md).
