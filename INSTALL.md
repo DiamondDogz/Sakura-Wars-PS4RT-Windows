@@ -77,6 +77,7 @@ English is the default. The EN button switches the launcher to French. The choic
 - The launcher cannot see `ps4rt.exe`: the zip was not unpacked in full. `bin/ps4rt.exe` must be present.
 - Update refused: the file must be a real `.pkg`, and the game folder must be the extracted CUSA directory, not a path you typed by hand with a missing character.
 - Permission denied, and the path is only the game folder: use windows-1.1.1 or newer. Older builds treated a harmless Windows directory check as a failure. If the message names a file inside the folder, that folder is read-only or held by another program. Close it, or move the extracted game somewhere you can write.
+- `Fault: read access to 0000000000000010` or `0000000000000011` at `ps4rt.exe+0x1c1ec8`: use windows-1.1.2 or newer. The AMD lines above it are warnings and can be ignored on NVIDIA. Updating the driver is still worth doing. This build no longer stops there.
 - A previous update stopped halfway: select the same 01.01 PKG again. The launcher resumes in place.
 
 ---
@@ -158,4 +159,5 @@ L’anglais est la langue de départ. Le bouton EN passe le lanceur en français
 - Le lanceur ne voit pas `ps4rt.exe` : l’archive n’a pas été décompressée en entier. `bin/ps4rt.exe` doit être là.
 - Mise à jour refusée : le fichier doit être un vrai `.pkg`, et le dossier du jeu doit être le dossier CUSA extrait.
 - Permission refusée, et le chemin est seulement le dossier du jeu : prenez windows-1.1.1 ou plus récent. Les builds d’avant prenaient un contrôle Windows sans importance pour un échec. Si le message nomme un fichier dans le dossier, ce dossier est en lecture seule ou tenu par un autre programme. Fermez-le, ou déplacez le jeu extrait dans un endroit où vous pouvez écrire.
+- `Fault: read access to 0000000000000010` ou `0000000000000011` à `ps4rt.exe+0x1c1ec8` : prenez windows-1.1.2 ou plus récent. Les lignes AMD au-dessus sont des avertissements. Sur NVIDIA, on les ignore. Mettre le pilote à jour reste utile. Cette version ne s’arrête plus là.
 - Une mise à jour s’est arrêtée au milieu : resélectionnez le même PKG 01.01. Le lanceur reprend sur place.

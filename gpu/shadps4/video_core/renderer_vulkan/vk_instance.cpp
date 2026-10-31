@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <boost/container/static_vector.hpp>
@@ -247,10 +248,19 @@ bool InitializePipelineBinaryCache(vk::Device device, bool supported,
         LOG_WARNING(Render_Vulkan, "Pipeline binary cache functions unavailable; using normal compilation");
         return false;
     }
-    const auto result = device.getPipelineKeyKHR(nullptr, &global_key);
-    if (result != vk::Result::eSuccess || !global_key.keySize ||
-        global_key.keySize > VK_MAX_PIPELINE_BINARY_KEY_SIZE_KHR) {
-        const auto key_size = global_key.keySize;
+    // Some NVIDIA drivers return from vkGetPipelineKeyKHR with rdi cleared.
+    // On Windows that register is callee-saved, so the next read of keySize
+    // faults at address 0x10. Keep the pointer in memory and load it again.
+    volatile std::uintptr_t key_address =
+        reinterpret_cast<std::uintptr_t>(static_cast<void*>(&global_key));
+    const VkResult raw = dispatch.vkGetPipelineKeyKHR(
+        static_cast<VkDevice>(device), nullptr,
+        reinterpret_cast<VkPipelineBinaryKeyKHR*>(&global_key));
+    auto* key = reinterpret_cast<vk::PipelineBinaryKeyKHR*>(static_cast<std::uintptr_t>(key_address));
+    const auto result = static_cast<vk::Result>(raw);
+    const auto key_size = key->keySize;
+    if (result != vk::Result::eSuccess || !key_size ||
+        key_size > VK_MAX_PIPELINE_BINARY_KEY_SIZE_KHR) {
         global_key = vk::PipelineBinaryKeyKHR{};
         LOG_WARNING(Render_Vulkan,
                     "Pipeline binary cache key unavailable (result {}, size {}); using normal compilation",
