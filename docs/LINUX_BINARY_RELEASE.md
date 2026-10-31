@@ -1,20 +1,28 @@
-# Sakura Wars PS4RT: Linux x86-64 release
+# Run the Sakura Wars PS4RT Linux x86-64 release (v1.0)
 
 **For players: download the portable Linux runtime, extract it, and point the launcher at your own game. No compilation, separate PKG extractor, or manual FFmpeg/SDL3 installation is required.**
 
-## 1. Download the player archive
+## 1. Download the right file
 
-Open the [latest Sakura Wars PS4RT release](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/latest).
+Open the [Sakura Wars PS4RT v1.0 GitHub release](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/tag/v1.0)
+(or [the latest release](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/latest)). Download:
 
-Choose the asset matching **`Sakura-Wars-PS4RT-*-linux-x86_64.tar.gz`**. This is the playable Linux runtime. The separately named **`Sakura-Wars-PS4RT-*-source.tar.gz`** is corresponding source for developers, not the game runtime. Each archive has a companion `.sha256` file. Do not confuse these with GitHub's automatically generated “Source code” downloads.
+- **[Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.0/Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz)**: prebuilt Linux runtime. **Choose this to play.**
+- [Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz.sha256](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.0/Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz.sha256): SHA256 verification file for the runtime.
+- [Sakura-Wars-PS4RT-85ac44f-source.tar.gz](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.0/Sakura-Wars-PS4RT-85ac44f-source.tar.gz): matching source code for developers, **not required just to play**.
+- [Sakura-Wars-PS4RT-85ac44f-source.tar.gz.sha256](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.0/Sakura-Wars-PS4RT-85ac44f-source.tar.gz.sha256): SHA256 verification file for the source archive.
 
-To check a downloaded runtime archive, put its matching `.sha256` next to it and run (in the download directory):
+These are the four uploaded release assets. GitHub's automatic “Source code”
+ZIP/tarball links are different from the matching source package above.
+
+To verify your runtime download, save the Linux `.tar.gz` and its `.sha256`
+in the same directory and run:
 
 ```bash
-sha256sum -c Sakura-Wars-PS4RT-*-linux-x86_64.tar.gz.sha256
+sha256sum -c Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz.sha256
 ```
 
-Use only one matching release archive at a time when using these wildcard commands.
+It should report `OK`.
 
 ## 2. Supply your own extracted PS4 game
 
@@ -34,11 +42,12 @@ Neither the runtime nor the source archive includes PS4 game data, updates, DLC,
 
 ## 3. Extract and launch
 
-From the directory containing the download:
+Extract the Linux archive using your file manager, or in the directory
+containing the downloaded runtime:
 
 ```bash
-tar -xzf Sakura-Wars-PS4RT-*-linux-x86_64.tar.gz
-cd Sakura-Wars-PS4RT-*-linux-x86_64
+tar -xzf Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz
+cd Sakura-Wars-PS4RT-85ac44f-linux-x86_64
 bash Play-Game.sh --game "/path/to/CUSA16429"
 ```
 
@@ -71,9 +80,9 @@ After installing DLC from **Game > Install DLC...** in the overlay, save your ga
 
 ## Requirements and limitations
 
-- Native **x86-64/AMD64 Linux**, with **glibc 2.35+** and **Python 3**. ARM64 and CPU translators such as FEX or Box64 are not supported or validated.
+- Native **x86-64/AMD64 Linux**, with **glibc 2.35+** and **Python 3**. ARM64 and CPU translators such as FEX or Box64 are not supported or validated, they might or might not work depending on the device.
 - Working Vulkan 1.3-capable graphics driver/loader and compatible desktop display/input environment. FSR 4 depends on additional compatible device features and falls back to other supported options when unavailable.
-- Fedora Linux with AMD/RADV graphics has been gameplay-tested. Other Linux distributions and GPUs, including Steam Deck / SteamOS, are not comprehensively validated.
+- Fedora Linux with AMD/RADV/NVIDIA graphics has been gameplay-tested.
 - The portable bundles its audited application libraries, including SDL3, FFmpeg and Crypto++. **Do not install separate versions or set `LD_LIBRARY_PATH` merely to run the portable.**
 
-This is an **experimental, title-specific** PS4 native compatibility runtime, not a general PS4 emulator. Testing has reached Chapters 1–3; the full game has **not** been verified end-to-end. For developer instructions, see [Linux distribution guide](DISTRIBUTING_LINUX.md), [Running on Linux](RUNNING_LINUX.md), and [`packaging/linux/README.md`](../packaging/linux/README.md).
+This is an **experimental, title-specific** PS4 native compatibility runtime, not a general PS4 emulator. Testing has reached Chapters 1–3; the full game has **not** been verified end-to-end as of 10/28/2026. For developer instructions, see [Linux distribution guide](DISTRIBUTING_LINUX.md), [Running on Linux](RUNNING_LINUX.md), and [`packaging/linux/README.md`](../packaging/linux/README.md).
