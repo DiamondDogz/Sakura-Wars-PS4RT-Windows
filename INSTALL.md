@@ -17,9 +17,11 @@ This project does not provide the game, keys, firmware, or saves.
 
 windows-1.0 and windows-1.1 were started on this machine. It is not a minimum requirement.
 
+- Windows 11 Pro for Workstations, version 26H2
 - Intel Core i9-12900KF
-- 128 GB DDR5-4800
-- NVIDIA GeForce RTX 3090
+- 128 GB DDR5, running at 4000 MT/s
+- NVIDIA GeForce RTX 3090, 24 GB
+- NVIDIA Studio driver 617.42, published 6 October 2026
 - 4 TB NVMe, PCI Express 4.0
 
 ## Unpack
@@ -96,9 +98,11 @@ Ce projet ne fournit ni le jeu, ni les clés, ni le firmware, ni les sauvegardes
 
 windows-1.0 et windows-1.1 ont été lancées sur cette machine. Ce n’est pas un minimum.
 
+- Windows 11 Professionnel pour les Stations de travail, version 26H2
 - Intel Core i9-12900KF
-- 128 Go de DDR5-4800
-- NVIDIA GeForce RTX 3090
+- 128 Go de DDR5, à 4000 MT/s
+- NVIDIA GeForce RTX 3090, 24 Go
+- Pilote NVIDIA Studio 617.42, publié le 6 octobre 2026
 - SSD NVMe de 4 To, PCI Express 4.0
 
 ## Décompresser
