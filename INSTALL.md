@@ -13,6 +13,15 @@ English first. La version française suit.
 
 This project does not provide the game, keys, firmware, or saves.
 
+## Tested on
+
+windows-1.0 and windows-1.1 were started on this machine. It is not a minimum requirement.
+
+- Intel Core i9-12900KF
+- 128 GB DDR5-4800
+- NVIDIA GeForce RTX 3090
+- 4 TB NVMe, PCI Express 4.0
+
 ## Unpack
 
 1. Unzip the archive. The folder can keep the name it already has.
@@ -82,6 +91,15 @@ English is the default. The EN button switches the launcher to French. The choic
 - Facultatif : vos PKG de DLC, tous dans un seul dossier.
 
 Ce projet ne fournit ni le jeu, ni les clés, ni le firmware, ni les sauvegardes.
+
+## Machine de test
+
+windows-1.0 et windows-1.1 ont été lancées sur cette machine. Ce n’est pas un minimum.
+
+- Intel Core i9-12900KF
+- 128 Go de DDR5-4800
+- NVIDIA GeForce RTX 3090
+- SSD NVMe de 4 To, PCI Express 4.0
 
 ## Décompresser
 
