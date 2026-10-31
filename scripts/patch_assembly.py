@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tempfile
 
@@ -169,11 +170,16 @@ def incomplete_marker(base: Path) -> Path:
 
 
 def _sync_directory(path: Path) -> None:
-    """Persist metadata where supported; some FUSE filesystems reject directory fsync."""
+    """Persist metadata where supported; some FUSE filesystems reject directory fsync.
+
+    Windows refuses os.open on a directory with Errno 13. That is not a protected
+    folder. The copied files were already fsynced.
+    """
     try:
         fd = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     except OSError as error:
-        if error.errno in (errno.EINVAL, errno.EOPNOTSUPP, errno.ENOTSUP):
+        if error.errno in (errno.EINVAL, errno.EOPNOTSUPP, errno.ENOTSUP,
+                           errno.EACCES, errno.EPERM):
             return
         raise
     try:
@@ -280,9 +286,17 @@ def apply_in_place(base: Path, patch: Path, read_sfo,
                     shutil.copyfileobj(original_file, stream, length=4 * 1024 * 1024)
                 stream.flush()
                 os.fsync(stream.fileno())
-            shutil.copymode(source, temporary, follow_symlinks=False)
+            try:
+                shutil.copymode(source, temporary, follow_symlinks=False)
+            except OSError:
+                pass
             if temporary.stat().st_size != source.stat().st_size:
                 raise PatchError(f"Short update copy: {relative}")
+            if os.name == "nt" and target.exists():
+                try:
+                    os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+                except OSError:
+                    pass
             os.replace(temporary, target)
             temporary = None
         finally:
