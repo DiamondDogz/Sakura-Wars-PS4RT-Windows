@@ -8,7 +8,7 @@ Non officiel. Aucun lien avec SEGA. Le jeu n’est pas inclus.
 
 Téléchargement : [windows-1.1](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1). Cette archive démarre le jeu. En jeu, Insert ouvre l’incrustation. Le préréglage graphique y est : Max, High, Medium, Lowest.
 
-Testé sur un Intel Core i9-12900KF, 128 Go de DDR5-4800, une NVIDIA GeForce RTX 3090, et un SSD NVMe de 4 To (PCI Express 4.0). C’est la machine de test, pas un minimum.
+Testé sur Windows 11 Professionnel pour les Stations de travail, version 26H2, un Intel Core i9-12900KF, 128 Go de DDR5 à 4000 MT/s, une NVIDIA GeForce RTX 3090 24 Go avec le pilote Studio 617.42 (6 octobre 2026), et un SSD NVMe de 4 To (PCI Express 4.0). C’est la machine de test, pas un minimum.
 
 ## Installation
 

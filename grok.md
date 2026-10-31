@@ -10,7 +10,7 @@ Portage Windows de [HekamiAeon/Sakura-Wars-PS4RT](https://github.com/HekamiAeon/
 
 La release à donner est `windows-1.1`. `windows-1.0` reste en ligne : elle suit la v1.0, commit `85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`. Ne pas la supprimer. Ne pas revenir à la v1.0.
 
-Machine de test, pas un minimum : Intel Core i9-12900KF, 128 Go DDR5-4800, NVIDIA GeForce RTX 3090, SSD NVMe 4 To Gen 4. Il a écrit DDR5-48000. C’est DDR5-4800. Ne pas publier 48000.
+Machine de test, pas un minimum : Windows 11 Professionnel pour les Stations de travail, version 26H2. Intel Core i9-12900KF, 128 Go DDR5 à 4000 MT/s (Windows l’affiche ainsi ; ne pas écrire 4800 ni 48000). NVIDIA GeForce RTX 3090 24 Go, pilote Studio 617.42 du 6 octobre 2026. SSD NVMe 4 To Gen 4. Ne pas publier le nom du PC, l’ID de périphérique, ni l’ID produit.
 
 Le jeu lui-même doit être en **01.01**. Ce numéro n'est pas celui du runtime.
 
