@@ -7,6 +7,16 @@
 #include <cstring>
 #ifndef _WIN32
 #include <sys/mman.h>
+#else
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#ifndef PROT_READ
+#define PROT_READ 1
+#define PROT_WRITE 2
+#define PROT_EXEC 4
+#endif
 #endif
 #include "ps4rt_settings.h"
 
@@ -47,8 +57,15 @@ constexpr std::uintptr_t PageSize = 0x1000;
 
 bool Protect(std::uint8_t* page, int prot) {
 #ifdef _WIN32
-    (void)page, (void)prot;
-    return false;
+    DWORD access = PAGE_NOACCESS;
+    const bool write = prot & PROT_WRITE;
+    const bool exec = prot & PROT_EXEC;
+    if (exec && write) access = PAGE_EXECUTE_READWRITE;
+    else if (exec) access = PAGE_EXECUTE_READ;
+    else if (write) access = PAGE_READWRITE;
+    else if (prot & PROT_READ) access = PAGE_READONLY;
+    DWORD previous = 0;
+    return VirtualProtect(page, PageSize, access, &previous) != 0;
 #else
     return mprotect(page, PageSize, prot) == 0;
 #endif
