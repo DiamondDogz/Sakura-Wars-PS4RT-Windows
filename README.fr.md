@@ -1,12 +1,12 @@
 # Sakura-Wars-PS4RT-Windows
 
-Portage Windows de [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), d’après le tag **v1.0**. Publié par [DiamondDogz](https://github.com/DiamondDogz). Le lanceur est `Kagekidan.exe`.
+Portage Windows de [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), d’après le tag **v1.1**. C’est le code de `main` en amont. Les deux commits suivants sur `main` ne sont que des textes. Publié par [DiamondDogz](https://github.com/DiamondDogz). Le lanceur est `Kagekidan.exe`.
 
-Ce n’est pas le runtime v1.1. La v1.1 est sortie le 30 octobre 2026 et n’est pas incluse. Ce n’est pas non plus la version du jeu : le jeu doit être en **01.01**.
+La release précédente, [windows-1.0](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.0), suit la v1.0. Cette branche non. Ce n’est pas non plus la version du jeu : le jeu doit être en **01.01**.
 
 Non officiel. Aucun lien avec SEGA. Le jeu n’est pas inclus.
 
-Téléchargement : [windows-1.0](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.0). Cette archive démarre le jeu.
+Téléchargement : [windows-1.1](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1). Cette archive démarre le jeu. En jeu, Insert ouvre l’incrustation. Le préréglage graphique y est : Max, High, Medium, Lowest.
 
 ## Installation
 

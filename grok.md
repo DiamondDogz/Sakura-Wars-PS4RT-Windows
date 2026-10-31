@@ -6,9 +6,9 @@ La personne parle français, va droit au but, et veut que le travail soit fait. 
 
 ## Quoi
 
-Portage Windows de [HekamiAeon/Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), à partir du tag **v1.0**, commit `85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`.
+Portage Windows de [HekamiAeon/Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), d’après le tag **v1.1**, commit `29f8822014e8d55d110476088191634f23bc9ce2`. C’est le code de `main` en amont. Les deux commits après ce tag ne sont que des textes. La branche par défaut est `windows`, avancée sur cette ligne le 31 octobre 2026 après un test réussi de l’archive `windows-1.1-test`.
 
-Ce n'est pas la ligne v1.1. La v1.1 a été étiquetée le 30 octobre 2026 à `29f8822014e8d55d110476088191634f23bc9ce2`. Elle n'est pas la base. `main` du dépôt amont a avancé. La branche de travail ici est `windows`.
+La release à donner est `windows-1.1`. `windows-1.0` reste en ligne : elle suit la v1.0, commit `85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`. Ne pas la supprimer. Ne pas revenir à la v1.0.
 
 Le jeu lui-même doit être en **01.01**. Ce numéro n'est pas celui du runtime.
 
@@ -53,12 +53,12 @@ PowerShell refusait les scripts (« l'exécution de scripts est désactivée »)
 - Interface verre, fond animé, textes qui suivent la taille de l'image. Pas de mentions d'écran en trop.
 - `media/theme.mp3` démarre tout seul, pas en sourdine, et s'arrête quand le jeu part.
 - En production, l'interface n'édite pas le dossier media. On remplace les fichiers à la main. Image et `theme.mp3`, mêmes noms.
-- Les réglages affichés sont seulement ceux que le build v1.0 fait vraiment : 1080p, 1440p, 2160p ; fenêtre, sans bordure, plein écran ; image d'origine, FSR 3.1, FSR 4 (repli sur 3.1) ; contours natifs ou coupés ; 30 ou 60 images ; anisotrope au prochain démarrage ; netteté. Pas les préréglages Native, High, Medium, Lowest de la v1.1.
+- Les réglages du lanceur restent ceux du build : 1080p, 1440p, 2160p ; fenêtre, sans bordure, plein écran ; image d’origine, FSR 3.1, FSR 4 (repli sur 3.1) ; contours natifs ou coupés ; 30 ou 60 images ; anisotrope au prochain démarrage ; netteté. Les préréglages v1.1 Max, High, Medium, Lowest sont dans l’incrustation en jeu (Insert), pas dans le lanceur. Max, ce sont les effets du jeu.
 - Chemins dans l'interface : dossier du jeu, un PKG de mise à jour, un dossier de DLC. Tous les `.pkg` de ce dossier partent ensemble. Pas un bouton « ajouter un DLC » un par un. Pas de chemin à coller : un explorateur.
 - DLSS reste éteint. Les sources du pont DLSS ne sont pas dans l'arbre. FSR reste.
 - Le mot du logo est `Kagekidan` en latin. Le K du monogramme a été remplacé par les kanjis **華撃団**, pas par un autre mot. Ce sont ceux de 帝国華撃団. Ils ont été composés avec Noto Serif JP, pas dessinés par un modèle. Le fond animé et la fleur sont générés, sans illustration officielle.
 - Thème : *さくらさくら*, mélodie traditionnelle, domaine public, publiée en 1888. Le fichier est une synthèse à cordes pincées, pas un enregistrement historique, pas l'opening commercial. On peut le remplacer en gardant le nom `theme.mp3`.
-- Licence du runtime : GPL-2.0-or-later. Pas de binaire GPL sans la source qui le produit. `ps4rt.exe` et `Kagekidan.exe` ne sont pas dans le dépôt tant que ce n'est pas tenu.
+- Licence du runtime : GPL-2.0-or-later. Pas de binaire GPL sans la source qui le produit. `ps4rt.exe` et `Kagekidan.exe` sont dans le dépôt, avec la source qui les produit. L’extracteur `bin/ps4rt-pkg.exe` qui ouvre les PKG est l’ancien binaire de 2 332 672 octets. Ne pas le remplacer par une reconstruction statique de Crypto++ : elle corrompt le tas.
 
 ## Ce qui a déjà marché chez lui
 
@@ -139,7 +139,6 @@ Le paragraphe qui décrivait la boucle de pétales dans le README a été retir�
 
 ## Suite
 
-1. Garder la branche `windows` sur la ligne v1.0. Ne pas mélanger la v1.1.
-2. Finir une compilation reproductible de `ps4rt.exe` avec ces sources, y compris les `.inc`.
-3. Seulement ensuite, un exe. La source qui le produit voyage avec lui.
-4. Le test chez lui : remplacer l'ancien `ps4rt.exe`, Jouer, plus de `error 487`, la fenêtre du jeu s'ouvre.
+1. La branche `windows` suit la v1.1. Ne pas la ramener à la v1.0.
+2. `windows-1.1` est l’archive à envoyer, testée le 31 octobre 2026. `windows-1.0` reste la précédente.
+3. Les préréglages s’appliquent avec `VirtualProtect` dans `gpu/shim/ps4rt_effects.cpp`. Ne pas remettre le `Protect` Windows qui renvoyait faux.

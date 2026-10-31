@@ -48,7 +48,7 @@ Settings this build actually exposes:
 - Anisotropic filtering, applied on the next start.
 - Sharpness.
 
-This build does not include the v1.1 presets Native, High, Medium and Lowest.
+This build includes the v1.1 graphics presets. In game, Insert opens the overlay. Graphics preset is Max, High, Medium, or Lowest. Max is the game's own effects.
 
 ## Picture and music
 
@@ -118,7 +118,7 @@ Réglages que ce build expose vraiment :
 - Filtrage anisotrope, appliqué au démarrage suivant.
 - Netteté.
 
-Ce build n’a pas les préréglages Native, High, Medium et Lowest de la v1.1.
+Ce build a les préréglages graphiques de la v1.1. En jeu, Insert ouvre l’incrustation. Le préréglage est Max, High, Medium ou Lowest. Max, ce sont les effets du jeu.
 
 ## Image et musique
 

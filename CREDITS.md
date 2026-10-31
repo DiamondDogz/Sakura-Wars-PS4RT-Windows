@@ -4,7 +4,7 @@ This is an unofficial Windows port. It does not replace, and is not endorsed by,
 
 ## Runtime
 
-- [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). The runtime. GPL-2.0-or-later. Written for Linux. This port follows the v1.0 release of 28 October 2026, commit `85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`, on the branch `windows`. The v1.1 tag is `29f8822014e8d55d110476088191634f23bc9ce2` and is not the base of that branch. This is not a general PS4 emulator.
+- [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). The runtime. GPL-2.0-or-later. Written for Linux. This port follows the v1.1 release of 30 October 2026, commit `29f8822014e8d55d110476088191634f23bc9ce2`, on the branch `windows`. Upstream `main` is that commit plus two documentation commits. The earlier Windows release follows v1.0, commit `85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`. This is not a general PS4 emulator.
 - [Felipe Prado, gow3_pc](https://github.com/FelipePrado0/gow3_pc). The compatibility runtime this line of work comes from.
 - [deadinside28](https://github.com/deadinside28/bloodborne_pc) and [Supermedo](https://github.com/Supermedo/bloodborne_pc), bloodborne_pc.
 - [shadPS4](https://github.com/shadps4-emu/shadPS4) and its contributors, including cuesta4, for the Vulkan renderer and the shader recompiler.
@@ -12,7 +12,7 @@ This is an unofficial Windows port. It does not replace, and is not endorsed by,
 
 ## Windows port
 
-- Published by [DiamondDogz](https://github.com/DiamondDogz). This is the Windows packaging and the launcher around the v1.0 runtime. It is not a claim on the runtime, and not a claim on the game.
+- Published by [DiamondDogz](https://github.com/DiamondDogz). This is the Windows packaging and the launcher around the v1.1 runtime. It is not a claim on the runtime, and not a claim on the game.
 - [Grok](https://grok.com), by xAI. The Windows launcher, its page, and the documents in this branch were written with Grok. The runtime was not rewritten by it. See [AI.md](AI.md).
 
 ## Libraries in the Windows build
@@ -39,4 +39,4 @@ This is an unofficial Windows port. It does not replace, and is not endorsed by,
 
 ## Release
 
-The release [windows-1.0](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.0) is the player archive for this branch. Its notes give the SHA-256. That archive starts CUSA16429 at game version 01.01. `Kagekidan.exe` is unsigned. Do not tell people to disable their antivirus.
+The release [windows-1.1](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1) is the player archive for this branch. [windows-1.0](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.0) is the previous archive, built from upstream v1.0. The notes give the SHA-256. The current archive starts CUSA16429 at game version 01.01. `Kagekidan.exe` is unsigned. Do not tell people to disable their antivirus.

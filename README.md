@@ -1,20 +1,20 @@
 # Sakura-Wars-PS4RT-Windows
 
-Windows port of [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), built from tag **v1.0**, commit `85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`. The branch `windows` is the default branch. `main` still holds the newer upstream line and is not the base of this work.
+Windows port of [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), built from tag **v1.1**, commit `29f8822014e8d55d110476088191634f23bc9ce2`. That tag is the code on upstream `main`. The two commits after it on `main` are documents only. The branch `windows` is the default branch.
 
 Published by [DiamondDogz](https://github.com/DiamondDogz). The launcher is `Kagekidan.exe`.
 
-This is not the v1.1 runtime. v1.1 was tagged on 30 October 2026 at `29f8822014e8d55d110476088191634f23bc9ce2` and is not the base of this branch. The game's own version is a separate number: the game must be **01.01**.
+The earlier Windows release, [windows-1.0](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.0), follows upstream v1.0 (`85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`). This branch does not. The game's own version is a separate number: the game must be **01.01**.
 
 Unofficial. Not affiliated with SEGA. The game is not included.
 
-Download: [windows-1.0](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.0). That archive starts the game.
+Download: [windows-1.1](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1). That archive starts the game. In the game, Insert opens the overlay. Graphics preset is there: Max, High, Medium, Lowest.
 
 Version française : [README.fr.md](README.fr.md).
 
 ## What is in this branch
 
-- The v1.0 runtime source, with the Windows changes needed to start it.
+- The v1.1 runtime source, with the Windows changes needed to start it.
 - `Kagekidan.exe`, `python/`, and `launcher/`.
 - `bin/ps4rt.exe`, rebuilt from this branch, and the libraries it imports.
 - `bin/ps4rt-pkg.exe`, the extractor used for an update or DLC.
