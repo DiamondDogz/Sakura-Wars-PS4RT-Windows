@@ -10,6 +10,8 @@ Portage Windows de [HekamiAeon/Sakura-Wars-PS4RT](https://github.com/HekamiAeon/
 
 La release à donner est `windows-1.1`. `windows-1.0` reste en ligne : elle suit la v1.0, commit `85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`. Ne pas la supprimer. Ne pas revenir à la v1.0.
 
+Machine de test, pas un minimum : Intel Core i9-12900KF, 128 Go DDR5-4800, NVIDIA GeForce RTX 3090, SSD NVMe 4 To Gen 4. Il a écrit DDR5-48000. C’est DDR5-4800. Ne pas publier 48000.
+
 Le jeu lui-même doit être en **01.01**. Ce numéro n'est pas celui du runtime.
 
 Dépôt : `DiamondDogz/Sakura-Wars-PS4RT-Windows`. Compte qui commit : `shinseiryuu`. Branche par défaut : `windows`. Dernière tête connue avant ce fichier : `5b63ed80c8c858c2cc1ba11364cd438fbbc13319`.
