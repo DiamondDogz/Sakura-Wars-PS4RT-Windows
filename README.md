@@ -12,6 +12,12 @@ Download: [windows-1.1.2](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windo
 
 [windows-1.1.3](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.3) is an experimental build with local trophies. Nothing is sent. Stay on windows-1.1.2 if you do not want that.
 
+The list is in the launcher. When the game earns a trophy, a card shows for a few seconds and does not take the controller.
+
+![Trophy card in the game](docs/images/trophy-card.png)
+
+![Trophy list in the launcher](docs/images/trophy-list.png)
+
 Tested on Windows 11 Pro for Workstations, version 26H2, an Intel Core i9-12900KF, 128 GB of DDR5 at 4000 MT/s, an NVIDIA GeForce RTX 3090 24 GB with Studio driver 617.42 (6 October 2026), and a 4 TB NVMe SSD (PCI Express 4.0). That is the test machine, not a minimum.
 
 Version française : [README.fr.md](README.fr.md).
