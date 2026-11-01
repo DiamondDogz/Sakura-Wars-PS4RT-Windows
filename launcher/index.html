@@ -411,8 +411,30 @@
       state.trophies = payload;
       const preferred = state.settings.trophyLang || (lang === "fr" ? "fr" : "en");
       trophyLang = payload.languages.some((item) => item.id === preferred) ? preferred : "en";
+      trophyWatch = trophyStamp(payload);
       render();
     });
+    function trophyStamp(file) {
+      if (!file || !file.trophies) return "";
+      return file.trophies.map((item) => item.id + "=" + (item.when || "")).join(",");
+    }
+
+    let trophyWatch = "";
+    async function watchTrophies() {
+      if (panel.name !== "trophies") return;
+      try {
+        const response = await fetch("/api/trophies");
+        if (!response.ok) return;
+        const payload = await response.json();
+        const stamp = trophyStamp(payload);
+        if (stamp === trophyWatch) return;
+        trophyWatch = stamp;
+        state.trophies = payload;
+        render();
+      } catch (error) {}
+    }
+    setInterval(watchTrophies, 1000);
+
     document.querySelector("#pick-game").addEventListener("click", () => pick("game"));
     document.querySelector("#pick-update").addEventListener("click", () => pick("update"));
     document.querySelector("#pick-dlc").addEventListener("click", () => pick("dlc"));
