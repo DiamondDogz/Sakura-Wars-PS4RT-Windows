@@ -10,6 +10,8 @@ Unofficial. Not affiliated with SEGA. The game is not included.
 
 Download: [windows-1.1.2](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.2). That archive starts the game. It is the tested v1.1 build. An old NVIDIA driver no longer closes the game on the shader-cache check: the game compiles shaders the normal way instead. The picture does not change. In the game, Insert opens the overlay. Graphics preset is there: Max, High, Medium, Lowest.
 
+[windows-1.1.3](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.3) is an experimental build with local trophies. Nothing is sent. Stay on windows-1.1.2 if you do not want that.
+
 Tested on Windows 11 Pro for Workstations, version 26H2, an Intel Core i9-12900KF, 128 GB of DDR5 at 4000 MT/s, an NVIDIA GeForce RTX 3090 24 GB with Studio driver 617.42 (6 October 2026), and a 4 TB NVMe SSD (PCI Express 4.0). That is the test machine, not a minimum.
 
 Version française : [README.fr.md](README.fr.md).

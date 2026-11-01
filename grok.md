@@ -8,7 +8,7 @@ La personne parle français, va droit au but, et veut que le travail soit fait. 
 
 Portage Windows de [HekamiAeon/Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), d’après le tag **v1.1**, commit `29f8822014e8d55d110476088191634f23bc9ce2`. C’est le code de `main` en amont. Les deux commits après ce tag ne sont que des textes. La branche par défaut est `windows`, avancée sur cette ligne le 31 octobre 2026 après un test réussi de l’archive `windows-1.1-test`.
 
-La release à donner est `windows-1.1`. `windows-1.0` reste en ligne : elle suit la v1.0, commit `85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`. Ne pas la supprimer. Ne pas revenir à la v1.0.
+La release stable à donner est `windows-1.1.2`. `windows-1.1.3` est expérimentale : trophées lus en local, carte dans le jeu. Qui n’en veut pas reste sur `windows-1.1.2`. `windows-1.0` reste en ligne : elle suit la v1.0, commit `85ac44fdc1fe7e13fac325e6ecea3b523be27d1f`. Ne pas la supprimer. Ne pas revenir à la v1.0. Ne pas remettre le bouton qui débloque un trophée à la main.
 
 Machine de test, pas un minimum : Windows 11 Professionnel pour les Stations de travail, version 26H2. Intel Core i9-12900KF, 128 Go DDR5 à 4000 MT/s (Windows l’affiche ainsi ; ne pas écrire 4800 ni 48000). NVIDIA GeForce RTX 3090 24 Go, pilote Studio 617.42 du 6 octobre 2026. SSD NVMe 4 To Gen 4. Ne pas publier le nom du PC, l’ID de périphérique, ni l’ID produit.
 
@@ -142,5 +142,5 @@ Le paragraphe qui décrivait la boucle de pétales dans le README a été retir�
 ## Suite
 
 1. La branche `windows` suit la v1.1. Ne pas la ramener à la v1.0.
-2. `windows-1.1` est l’archive à envoyer, testée le 31 octobre 2026. `windows-1.0` reste la précédente.
+2. `windows-1.1.2` est l’archive stable. `windows-1.1.3` est l’essai des trophées. `windows-1.0` reste la précédente.
 3. Les préréglages s’appliquent avec `VirtualProtect` dans `gpu/shim/ps4rt_effects.cpp`. Ne pas remettre le `Protect` Windows qui renvoyait faux.
