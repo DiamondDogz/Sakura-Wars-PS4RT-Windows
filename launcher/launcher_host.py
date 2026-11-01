@@ -198,6 +198,7 @@ def trophy_view(game):
             "text": item["text"],
             "when": unlocked,
         })
+    rows.sort(key=lambda row: (bool(row["when"]), row["when"]), reverse=True)
     return {"languages": catalog["languages"], "trophies": rows}
 
 
