@@ -283,6 +283,7 @@ def main(argv=None) -> int:
     env['PS4RT_RESTART_COMMAND'] = quote_command(restart)
     env['PS4RT_GPU_USER_DIR'] = str(gpu_user)
     env['PS4RT_TROPHY_FILE'] = str(user_dir / 'trophies.json')
+    env['PS4RT_TROPHY_QUEUE'] = str(user_dir / 'trophy-queue')
     prepare_trophy_card(game, original_game, user_dir, env)
     env['PS4RT_CONFIG'] = str(out / 'ps4rt.ini')
     env.setdefault('PS4RT_FSR4_DIR', str(ROOT / 'fsr4_shaders'))

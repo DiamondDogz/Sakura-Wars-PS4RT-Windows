@@ -7,13 +7,14 @@ import subprocess
 import sys
 import threading
 import webbrowser
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-from trophy_trp import read_trp, read_unlocks
+from trophy_trp import note_unlock, read_trp, read_unlocks
 PAGE = Path(__file__).resolve().parent / "index.html"
 BRAND = Path(__file__).resolve().parent / "brand"
 STATE = ROOT / "launcher-state.json"
@@ -165,6 +166,10 @@ def console_python():
     return str(exe)
 
 
+def trophy_user():
+    return ROOT / "out" / "CUSA16429" / "user"
+
+
 def trophy_view(game):
     folder = Path(str(game or "")).expanduser()
     trp = folder / "sce_sys" / "trophy" / "trophy00.trp"
@@ -177,7 +182,7 @@ def trophy_view(game):
             TROPHY_CACHE["path"] = str(trp)
             TROPHY_CACHE["stamp"] = stamp
         catalog = TROPHY_CACHE["catalog"]
-    unlocks = read_unlocks(ROOT / "out" / "CUSA16429" / "user" / "trophies.json")
+    unlocks = read_unlocks(trophy_user() / "trophies.json")
     rows = []
     for item in catalog["trophies"]:
         trophy_id = str(item["id"]).zfill(3)
@@ -194,6 +199,22 @@ def trophy_view(game):
             "when": unlocked,
         })
     return {"languages": catalog["languages"], "trophies": rows}
+
+
+def manual_unlock(game, trophy_id):
+    """Mark one trophy taken locally and queue its card. The game's answer stays empty."""
+    text = str(trophy_id).strip()
+    if not text.isdigit():
+        raise RuntimeError("bad-id")
+    number = int(text)
+    when = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    user = trophy_user()
+    note_unlock(user / "trophies.json", number, when)
+    queue = user / "trophy-queue"
+    queue.parent.mkdir(parents=True, exist_ok=True)
+    with queue.open("a", encoding="ascii") as handle:
+        handle.write(f"{number}\n")
+    return trophy_view(game)
 
 
 def launch(state):
@@ -318,6 +339,10 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             payload = self.read_json()
+            if path == "/api/trophies/unlock":
+                state = load_state()
+                self.send_json(200, manual_unlock(state["paths"].get("game"), payload.get("id")))
+                return
             with LOCK:
                 if path == "/api/state":
                     state = load_state()

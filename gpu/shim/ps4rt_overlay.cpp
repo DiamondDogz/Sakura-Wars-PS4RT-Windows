@@ -1675,10 +1675,69 @@ void SetLoading(bool active, u32 done, u32 total) {
     loading = active;
 }
 
+// Test build only. The launcher appends ids to PS4RT_TROPHY_QUEUE.
+// This shows the card. trophy_unlock_state still answers that nothing is unlocked.
+bool ManualQueueWaiting() {
+    static s64 next = 0;
+    static bool waiting = false;
+    const s64 now = NowMs();
+    if (now < next) {
+        return waiting;
+    }
+    next = now + 200;
+    waiting = false;
+    const char* path = std::getenv("PS4RT_TROPHY_QUEUE");
+    if (!path || !*path) {
+        return false;
+    }
+    if (std::FILE* in = std::fopen(path, "rb")) {
+        waiting = std::fgetc(in) != EOF;
+        std::fclose(in);
+    }
+    return waiting;
+}
+
+void TakeManualQueue() {
+    const char* path = std::getenv("PS4RT_TROPHY_QUEUE");
+    if (!path || !*path) {
+        return;
+    }
+    const std::string taken = std::string(path) + ".taken";
+    std::remove(taken.c_str());
+    if (std::rename(path, taken.c_str()) != 0) {
+        return;
+    }
+    std::FILE* in = std::fopen(taken.c_str(), "rb");
+    if (!in) {
+        return;
+    }
+    int id = 0;
+    bool have = false;
+    int byte = 0;
+    while ((byte = std::fgetc(in)) != EOF) {
+        if (byte >= '0' && byte <= '9') {
+            have = true;
+            id = id > 127 ? id : id * 10 + (byte - '0');
+        } else if (have) {
+            if (id >= 0 && id <= 127) {
+                ShowTrophy(id);
+            }
+            id = 0;
+            have = false;
+        }
+    }
+    if (have && id >= 0 && id <= 127) {
+        ShowTrophy(id);
+    }
+    std::fclose(in);
+    std::remove(taken.c_str());
+}
+
 bool Visible() {
     const auto& s = Ps4RtSettings::Get();
     return initialized && (loading || background_total || menu_open || text_entry_active || choice_active ||
-                           choice_retiring || s.show_fps || NoticeActive() || TrophyPending());
+                           choice_retiring || s.show_fps || NoticeActive() || TrophyPending() ||
+                           ManualQueueWaiting());
 }
 
 bool CapturesInput() {
@@ -1718,6 +1777,7 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent) {
         frame_ms_avg = frame_ms_avg == 0.0f ? ms : frame_ms_avg * 0.95f + ms * 0.05f;
     }
     ConfirmRestart();
+    TakeManualQueue();
     if (!Visible()) {
         return;
     }

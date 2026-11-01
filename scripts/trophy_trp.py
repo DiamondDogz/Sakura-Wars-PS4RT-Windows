@@ -216,6 +216,23 @@ def read_unlocks(path: Path) -> dict[str, str]:
     return {str(key).zfill(3): str(value) for key, value in unlocked.items() if str(value)}
 
 
+def note_unlock(path: Path, trophy_id: int, when: str) -> None:
+    """Record one local unlock. Does not change what the game is told."""
+    number = int(trophy_id)
+    if number < 0 or number > 127 or not when:
+        raise ValueError("bad-id")
+    file = Path(path)
+    unlocks = read_unlocks(file)
+    key = f"{number:03d}"
+    if key not in unlocks:
+        unlocks[key] = when
+    file.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"unlocked": {key: unlocks[key] for key in sorted(unlocks)}}
+    temporary = file.with_name(file.name + ".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+    temporary.replace(file)
+
+
 def _one_line(value: str) -> str:
     return " ".join(str(value).replace("\t", " ").split())
 

@@ -75,10 +75,11 @@
     input[type="range"] { width: 100%; accent-color: var(--gold); }
     .panel.wide { left: 0; width: auto; }
     .langs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.75rem; }
-    .trophy { display: grid; grid-template-columns: 3rem 1fr auto minmax(8rem, 34%); gap: 0.6rem; align-items: center; width: 100%; min-height: 4.2rem; margin-top: 0.4rem; border: 0; border-radius: 0.7rem; background: #161616; color: var(--paper); text-align: left; padding: 0.4rem 0.6rem; }
+    .trophy { display: grid; grid-template-columns: 3rem 1fr auto auto minmax(8rem, 34%); gap: 0.6rem; align-items: center; width: 100%; min-height: 4.2rem; margin-top: 0.4rem; border: 0; border-radius: 0.7rem; background: #161616; color: var(--paper); text-align: left; padding: 0.4rem 0.6rem; }
     .trophy img { width: 3rem; height: 3rem; object-fit: cover; background: #0c0c0c; }
     .trophy b { display: block; }
     .trophy small { color: var(--muted); }
+    .trophy button { height: 2rem; padding: 0 0.7rem; }
   </style>
 </head>
 <body>
@@ -172,6 +173,7 @@
         "missing-game": "That game folder does not exist.",
         trophies: "Trophies", trophyHint: "Read from your trophy00.trp. Nothing is sent.",
         locked: "Locked", unlocked: "Unlocked", hidden: "Hidden", missingTrp: "trophy00.trp was not found in that game folder.",
+        unlock: "Unlock", unlockQueued: "The card will show in the game. The game still sees it locked.",
       },
       fr: {
         home: "Accueil", settings: "Réglages", paths: "Chemins", theme: "Thème", language: "Langue",
@@ -189,6 +191,7 @@
         "missing-game": "Ce dossier de jeu n'existe pas.",
         trophies: "Trophées", trophyHint: "Lu dans ton trophy00.trp. Rien n'est envoyé.",
         locked: "Fermé", unlocked: "Pris", hidden: "Caché", missingTrp: "trophy00.trp est introuvable dans ce dossier.",
+        unlock: "Débloquer", unlockQueued: "La carte s'affichera dans le jeu. Le jeu le voit encore fermé.",
       },
     };
     let lang = "en";
@@ -340,12 +343,33 @@
           main.append(name, grade);
           const when = document.createElement("small");
           when.textContent = item.when ? item.when.replace("T", " ").replace("Z", "") : t("locked");
+          const unlock = document.createElement("button");
+          unlock.type = "button";
+          unlock.className = "choice";
+          unlock.textContent = t("unlock");
+          unlock.addEventListener("click", () => unlockTrophy(item.id));
           const detail = document.createElement("small");
           detail.textContent = hidden ? "" : copyText.detail;
-          row.append(img, main, when, detail);
+          row.append(img, main, when, unlock, detail);
           trophyList.appendChild(row);
         });
       }
+    }
+
+    async function unlockTrophy(id) {
+      const response = await fetch("/api/trophies/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        showNote(explain(payload.error));
+        return;
+      }
+      state.trophies = payload;
+      showNote(t("unlockQueued"));
+      render();
     }
 
     async function save() {
