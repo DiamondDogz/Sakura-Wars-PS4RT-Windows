@@ -39,6 +39,10 @@ bool Visible();
 /// Any thread: a short message in the lower right corner (a saved screenshot).
 void ShowNotice(const std::string& text, int milliseconds = 3000);
 
+/// Any thread: a trophy card for a few seconds. It does not take the controller.
+/// Names are read from PS4RT_TROPHY_CARD_DIR (written locally at launch, not shipped).
+void ShowTrophy(int id);
+
 /// Present thread: draws into `view` (layout ColorAttachmentOptimal).
 void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent);
 

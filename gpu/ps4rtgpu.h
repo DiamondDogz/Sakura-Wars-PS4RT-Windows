@@ -35,6 +35,8 @@ int ps4rtgpu_choice_begin(const char *title, const char *const *items, const cha
 int ps4rtgpu_choice_poll(void);
 /* 1 while the in-game settings menu is open: the game's pad input is held neutral. */
 int ps4rtgpu_overlay_captures_input(void);
+/* Local trophy card for a few seconds. Does not change the answer returned to the game. */
+void ps4rtgpu_trophy_card(int32_t id);
 /* Controller vibration strength set in the menu, 0 (off) to 100 (the game's own). */
 int ps4rtgpu_vibration_percent(void);
 /* Number of symbols registered by the vendored libraries (diagnostics). */

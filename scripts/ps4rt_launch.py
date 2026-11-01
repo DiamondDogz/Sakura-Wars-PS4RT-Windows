@@ -5,6 +5,7 @@ Future games require reverse engineering and source changes. Not a general PS4 e
 """
 # SPDX-License-Identifier: GPL-2.0-or-later
 import argparse
+import json
 import os
 from pathlib import Path
 import re
@@ -29,6 +30,38 @@ def quote_command(args) -> str:
     if os.name == 'nt':
         return subprocess.list2cmdline([str(part) for part in args])
     return shlex.join([str(part) for part in args])
+
+
+def trophy_language() -> str:
+    allowed = {'en', 'fr', 'ja', 'es', 'de', 'ko', 'zh-Hant'}
+    try:
+        payload = json.loads((ROOT / 'launcher-state.json').read_text(encoding='utf-8'))
+        settings = payload.get('settings') or {}
+        chosen = str(settings.get('trophyLang') or settings.get('lang') or '')
+    except (OSError, ValueError):
+        chosen = ''
+    return chosen if chosen in allowed else 'en'
+
+
+def prepare_trophy_card(game: Path, original: Path, user_dir: Path, env: dict) -> None:
+    """Read trophy00.trp from the game folder into the writable user dir. Never fails the launch."""
+    env['PS4RT_TROPHY_LANG'] = trophy_language()
+    trp = None
+    for folder in (game, original):
+        candidate = Path(folder) / 'sce_sys' / 'trophy' / 'trophy00.trp'
+        if candidate.is_file():
+            trp = candidate
+            break
+    if trp is None:
+        return
+    try:
+        from trophy_trp import write_card_cache
+        card_dir = user_dir / 'trophy-card'
+        count = write_card_cache(trp, card_dir, env['PS4RT_TROPHY_LANG'])
+        env['PS4RT_TROPHY_CARD_DIR'] = str(card_dir)
+        print(f'Trophy card cache: {count}', flush=True)
+    except (OSError, ValueError, KeyError):
+        print('Trophy card cache skipped.', flush=True)
 
 
 def runtime_binary() -> Path:
@@ -249,6 +282,8 @@ def main(argv=None) -> int:
         restart += ['--dlc', str(args.dlc.expanduser().resolve())]
     env['PS4RT_RESTART_COMMAND'] = quote_command(restart)
     env['PS4RT_GPU_USER_DIR'] = str(gpu_user)
+    env['PS4RT_TROPHY_FILE'] = str(user_dir / 'trophies.json')
+    prepare_trophy_card(game, original_game, user_dir, env)
     env['PS4RT_CONFIG'] = str(out / 'ps4rt.ini')
     env.setdefault('PS4RT_FSR4_DIR', str(ROOT / 'fsr4_shaders'))
     if args.upscaler is not None:

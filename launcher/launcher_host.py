@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Open the visual launcher and start the Windows runtime from it."""
+import base64
 import json
 import os
 import subprocess
@@ -11,6 +12,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+from trophy_trp import read_trp, read_unlocks
 PAGE = Path(__file__).resolve().parent / "index.html"
 BRAND = Path(__file__).resolve().parent / "brand"
 STATE = ROOT / "launcher-state.json"
@@ -26,6 +29,7 @@ OUTPUTS = {1: "1920x1080", 2: "2560x1440", 3: "3840x2160"}
 OUTPUT_FLAG = {1: "1080", 2: "1440", 3: "4k"}
 LOCK = threading.Lock()
 PROCESS = {"handle": None}
+TROPHY_CACHE = {"path": "", "stamp": 0.0, "catalog": None}
 
 DEFAULT = {
     "settings": {
@@ -161,6 +165,37 @@ def console_python():
     return str(exe)
 
 
+def trophy_view(game):
+    folder = Path(str(game or "")).expanduser()
+    trp = folder / "sce_sys" / "trophy" / "trophy00.trp"
+    if not trp.is_file():
+        raise RuntimeError("missing-trp")
+    stamp = trp.stat().st_mtime
+    with LOCK:
+        if TROPHY_CACHE["path"] != str(trp) or TROPHY_CACHE["stamp"] != stamp:
+            TROPHY_CACHE["catalog"] = read_trp(trp)
+            TROPHY_CACHE["path"] = str(trp)
+            TROPHY_CACHE["stamp"] = stamp
+        catalog = TROPHY_CACHE["catalog"]
+    unlocks = read_unlocks(ROOT / "out" / "CUSA16429" / "user" / "trophies.json")
+    rows = []
+    for item in catalog["trophies"]:
+        trophy_id = str(item["id"]).zfill(3)
+        unlocked = unlocks.get(trophy_id, "")
+        icon = ""
+        if item["icon"] and (not item["hidden"] or unlocked):
+            icon = "data:image/png;base64," + base64.b64encode(item["icon"]).decode("ascii")
+        rows.append({
+            "id": trophy_id,
+            "grade": item["grade"],
+            "hidden": item["hidden"],
+            "icon": icon,
+            "text": item["text"],
+            "when": unlocked,
+        })
+    return {"languages": catalog["languages"], "trophies": rows}
+
+
 def launch(state):
     game = str(state["paths"].get("game") or "").strip()
     if not game:
@@ -260,6 +295,13 @@ class Handler(BaseHTTPRequestHandler):
             state = load_state()
             state["media"] = media_info()
             self.send_json(200, state)
+            return
+        if path == "/api/trophies":
+            state = load_state()
+            try:
+                self.send_json(200, trophy_view(state["paths"].get("game")))
+            except (OSError, RuntimeError, ValueError, KeyError) as error:
+                self.send_json(404, {"error": str(error) or "missing-trp"})
             return
         if path == "/api/log":
             text = ""

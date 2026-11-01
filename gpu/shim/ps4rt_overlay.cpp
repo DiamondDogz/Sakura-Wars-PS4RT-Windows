@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <mutex>
 #include <thread>
 #ifndef _WIN32
@@ -75,6 +76,26 @@ std::atomic<u32> background_done{0}, background_total{0};
 std::mutex notice_mutex;
 std::string notice_text;
 std::atomic<s64> notice_until{0}; // steady_clock milliseconds
+// Trophy card: queued from the game thread, drawn for a few seconds, never takes input.
+struct TrophyText {
+    char grade = 'B';
+    std::string name;
+    std::string detail;
+};
+struct TrophyCopy {
+    char grade = 'B';
+    std::string name = "Trophy";
+    std::string detail;
+    Ps4RtPng::Image icon;
+};
+std::mutex trophy_mutex;
+std::deque<TrophyCopy> trophy_queue;
+std::unordered_map<int, TrophyText> trophy_catalog;
+bool trophy_catalog_ready = false;
+std::string trophy_name, trophy_detail;
+char trophy_grade = 'B';
+std::atomic<s64> trophy_until{0};
+ImTextureData* trophy_texture = nullptr;
 bool dirty = false; // settings changed while open: saved on close
 bool focus_graphics = false;
 Ps4RtMenuInput::Controllers menu_controllers;
@@ -1047,6 +1068,198 @@ void ShowNotice(const std::string& text, int milliseconds) {
     notice_until.store(NowMs() + milliseconds, std::memory_order_relaxed);
 }
 
+namespace {
+
+// trophy_mutex held. One local index written at launch; missing file means a plain card.
+void EnsureTrophyCatalog() {
+    if (trophy_catalog_ready) {
+        return;
+    }
+    trophy_catalog_ready = true;
+    const char* dir = std::getenv("PS4RT_TROPHY_CARD_DIR");
+    if (!dir || !*dir) {
+        return;
+    }
+    const std::string path = std::string(dir) + "/index.tsv";
+    std::FILE* in = std::fopen(path.c_str(), "rb");
+    if (!in) {
+        return;
+    }
+    char line[1200];
+    while (std::fgets(line, sizeof(line), in)) {
+        char* grade = std::strchr(line, '\t');
+        if (!grade) continue;
+        *grade++ = 0;
+        char* name = std::strchr(grade, '\t');
+        if (!name) continue;
+        *name++ = 0;
+        char* detail = std::strchr(name, '\t');
+        if (!detail) continue;
+        *detail++ = 0;
+        size_t length = std::strlen(detail);
+        while (length && (detail[length - 1] == '\n' || detail[length - 1] == '\r')) {
+            detail[--length] = 0;
+        }
+        TrophyText row;
+        row.grade = grade[0] ? grade[0] : 'B';
+        row.name = name;
+        row.detail = detail;
+        trophy_catalog[std::atoi(line)] = std::move(row);
+    }
+    std::fclose(in);
+}
+
+const char* TrophyWord(const char* lang, char grade) {
+    struct Row { const char* lang; const char* earned; const char* p; const char* g; const char* s; const char* b; };
+    static const Row rows[] = {
+        {"fr", "Trophée obtenu", "Platine", "Or", "Argent", "Bronze"},
+        {"es", "Trofeo conseguido", "Platino", "Oro", "Plata", "Bronce"},
+        {"de", "Trophäe erhalten", "Platin", "Gold", "Silber", "Bronze"},
+        {"ja", "トロフィーを獲得", "プラチナ", "ゴールド", "シルバー", "ブロンズ"},
+        {"ko", "트로피 획득", "플래티넘", "골드", "실버", "브론즈"},
+        {"zh-Hant", "獲得獎盃", "白金", "金", "銀", "銅"},
+        {"en", "Trophy earned", "Platinum", "Gold", "Silver", "Bronze"},
+    };
+    const Row* row = &rows[6];
+    if (lang) {
+        for (const Row& candidate : rows) {
+            if (std::strcmp(candidate.lang, lang) == 0) {
+                row = &candidate;
+                break;
+            }
+        }
+    }
+    if (grade == 0) return row->earned;
+    if (grade == 'P') return row->p;
+    if (grade == 'G') return row->g;
+    if (grade == 'S') return row->s;
+    return row->b;
+}
+
+ImVec4 TrophyColor(char grade) {
+    if (grade == 'P') return ImVec4(0.93f, 0.94f, 0.96f, 1.0f);
+    if (grade == 'G') return ImVec4(0.95f, 0.78f, 0.28f, 1.0f);
+    if (grade == 'S') return ImVec4(0.78f, 0.82f, 0.86f, 1.0f);
+    return ImVec4(0.86f, 0.58f, 0.34f, 1.0f);
+}
+
+void RetireTrophyTexture() {
+    if (!trophy_texture) return;
+    trophy_texture->WantDestroyNextFrame = true;
+    choice_retired.push_back(trophy_texture);
+    choice_retiring = true;
+    trophy_texture = nullptr;
+}
+
+// Present thread, imgui_mutex held, before NewFrame.
+void PrepareTrophyCard() {
+    TrophyCopy next;
+    bool start = false;
+    {
+        std::scoped_lock lock{trophy_mutex};
+        const s64 now = NowMs();
+        if (trophy_until.load(std::memory_order_relaxed) > now) return;
+        if (trophy_queue.empty()) {
+            trophy_until.store(0, std::memory_order_relaxed);
+            start = false;
+        } else {
+            next = std::move(trophy_queue.front());
+            trophy_queue.pop_front();
+            trophy_name = next.name.empty() ? "Trophy" : next.name;
+            trophy_detail = next.detail;
+            trophy_grade = next.grade;
+            trophy_until.store(now + 5200, std::memory_order_relaxed);
+            start = true;
+        }
+    }
+    if (!start) {
+        if (!trophy_name.empty() && trophy_until.load(std::memory_order_relaxed) == 0) {
+            trophy_name.clear();
+            trophy_detail.clear();
+            RetireTrophyTexture();
+        }
+        return;
+    }
+    RetireTrophyTexture();
+    const Ps4RtPng::Image& icon = next.icon;
+    if (!icon.rgba.empty() && icon.width > 0 && icon.height > 0 && icon.width <= 1024 && icon.height <= 1024) {
+        trophy_texture = IM_NEW(ImTextureData)();
+        trophy_texture->Create(ImTextureFormat_RGBA32, icon.width, icon.height);
+        std::memcpy(trophy_texture->GetPixels(), icon.rgba.data(), icon.rgba.size());
+        ImGui::RegisterUserTexture(trophy_texture);
+    }
+}
+
+bool TrophyPending() {
+    std::scoped_lock lock{trophy_mutex};
+    // Stay visible one frame after the card ends so its picture can be released.
+    return trophy_texture || !trophy_name.empty() ||
+           trophy_until.load(std::memory_order_relaxed) > NowMs() || !trophy_queue.empty();
+}
+
+void TrophyCard() {
+    const char* lang = std::getenv("PS4RT_TROPHY_LANG");
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float pad = 18.0f * base_scale;
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - pad, viewport->WorkPos.y + pad),
+                            ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(340.0f * base_scale, 0.0f), ImVec2(520.0f * base_scale, 240.0f * base_scale));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.06f, 0.94f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.86f, 0.72f, 0.32f, 0.90f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 14.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * base_scale, 12.0f * base_scale));
+    ImGui::Begin("##trophy_card", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                     ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav |
+                     ImGuiWindowFlags_NoFocusOnAppearing);
+    if (trophy_texture) {
+        ImGui::Image(trophy_texture->GetTexRef(), ImVec2(72.0f * base_scale, 72.0f * base_scale));
+        ImGui::SameLine();
+    }
+    ImGui::BeginGroup();
+    ImGui::TextColored(TrophyColor(trophy_grade), "%s", TrophyWord(lang, trophy_grade));
+    ImGui::TextWrapped("%s", trophy_name.c_str());
+    if (!trophy_detail.empty()) {
+        ImGui::TextDisabled("%s", trophy_detail.c_str());
+    }
+    ImGui::EndGroup();
+    ImGui::End();
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
+}
+
+} // namespace
+
+void ShowTrophy(int id) {
+    if (id < 0 || id > 127) return;
+    TrophyCopy copy;
+    const char* dir = nullptr;
+    {
+        std::scoped_lock lock{trophy_mutex};
+        EnsureTrophyCatalog();
+        const auto found = trophy_catalog.find(id);
+        if (found != trophy_catalog.end()) {
+            copy.grade = found->second.grade;
+            copy.name = found->second.name.empty() ? "Trophy" : found->second.name;
+            copy.detail = found->second.detail;
+        }
+        dir = std::getenv("PS4RT_TROPHY_CARD_DIR");
+    }
+    std::string icon_path;
+    if (dir && *dir) {
+        char file[16];
+        std::snprintf(file, sizeof(file), "%03d.png", id);
+        icon_path = std::string(dir) + "/" + file;
+    }
+    if (!icon_path.empty()) {
+        Ps4RtPng::LoadRgba(icon_path.c_str(), copy.icon);
+    }
+    std::scoped_lock lock{trophy_mutex};
+    if (trophy_queue.size() >= 8) trophy_queue.pop_front();
+    trophy_queue.push_back(std::move(copy));
+}
+
 void Init(const Vulkan::Instance& instance, vk::Format format, u32 image_count) {
     std::scoped_lock lock{imgui_mutex};
     if (initialized) {
@@ -1102,6 +1315,34 @@ void Init(const Vulkan::Instance& instance, vk::Format format, u32 image_count) 
     font_config.FontDataOwnedByAtlas = false;
     io.Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(ps4rt_font_ttf),
                                    int(ps4rt_font_ttf_end - ps4rt_font_ttf), 18.0f, &font_config);
+#ifdef _WIN32
+    // French, English, Spanish and German already fit the embedded font.
+    // Japanese, Korean and Chinese use a Windows font, and only for that card language.
+    if (const char* lang = std::getenv("PS4RT_TROPHY_LANG")) {
+        const char* path = nullptr;
+        const ImWchar* ranges = nullptr;
+        if (std::strcmp(lang, "ja") == 0) {
+            path = "C:\\Windows\\Fonts\\YuGothM.ttc";
+            ranges = io.Fonts->GetGlyphRangesJapanese();
+        } else if (std::strcmp(lang, "ko") == 0) {
+            path = "C:\\Windows\\Fonts\\malgun.ttf";
+            ranges = io.Fonts->GetGlyphRangesKorean();
+        } else if (std::strcmp(lang, "zh-Hant") == 0) {
+            path = "C:\\Windows\\Fonts\\msjh.ttc";
+            ranges = io.Fonts->GetGlyphRangesChineseFull();
+        }
+        if (path && ranges) {
+            if (std::FILE* probe = std::fopen(path, "rb")) {
+                std::fclose(probe);
+                ImFontConfig merge;
+                merge.MergeMode = true;
+                if (!io.Fonts->AddFontFromFileTTF(path, 18.0f, &merge, ranges)) {
+                    std::fprintf(stderr, "Overlay: trophy font unavailable\n");
+                }
+            }
+        }
+    }
+#endif
 
     const vk::Instance vk_instance = instance.GetInstance();
     ImGui_ImplVulkan_LoadFunctions(
@@ -1437,7 +1678,7 @@ void SetLoading(bool active, u32 done, u32 total) {
 bool Visible() {
     const auto& s = Ps4RtSettings::Get();
     return initialized && (loading || background_total || menu_open || text_entry_active || choice_active ||
-                           choice_retiring || s.show_fps || NoticeActive());
+                           choice_retiring || s.show_fps || NoticeActive() || TrophyPending());
 }
 
 bool CapturesInput() {
@@ -1493,6 +1734,7 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent) {
         base_scale = scale;
     }
 
+    PrepareTrophyCard();
     UpdateChoiceTextures();
     ImGui_ImplVulkan_NewFrame();
     cancel_was_editing = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) || ImGui::GetActiveID();
@@ -1524,6 +1766,9 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent) {
     }
     if (NoticeActive()) {
         Notice();
+    }
+    if (trophy_until.load(std::memory_order_relaxed) > NowMs()) {
+        TrophyCard();
     }
     if (background_total && !loading && !menu_open) {
         BackgroundLoading();

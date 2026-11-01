@@ -354,6 +354,10 @@ extern "C" int ps4rtgpu_overlay_captures_input(void) {
     return Ps4RtOverlay::CapturesInput() ? 1 : 0;
 }
 
+extern "C" void ps4rtgpu_trophy_card(int id) {
+    Ps4RtOverlay::ShowTrophy(id);
+}
+
 extern "C" int ps4rtgpu_text_input_begin(const char* initial, const char* prompt) {
     if (!g_window) return 0;
     g_window->BeginTextInput(initial ? initial : "", prompt ? prompt : "Text");

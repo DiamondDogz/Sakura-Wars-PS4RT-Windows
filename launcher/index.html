@@ -73,6 +73,12 @@
     .dlc { display: flex; gap: 0.5rem; align-items: center; font-size: 0.9rem; }
     .dlc span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     input[type="range"] { width: 100%; accent-color: var(--gold); }
+    .panel.wide { left: 0; width: auto; }
+    .langs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.75rem; }
+    .trophy { display: grid; grid-template-columns: 3rem 1fr auto minmax(8rem, 34%); gap: 0.6rem; align-items: center; width: 100%; min-height: 4.2rem; margin-top: 0.4rem; border: 0; border-radius: 0.7rem; background: #161616; color: var(--paper); text-align: left; padding: 0.4rem 0.6rem; }
+    .trophy img { width: 3rem; height: 3rem; object-fit: cover; background: #0c0c0c; }
+    .trophy b { display: block; }
+    .trophy small { color: var(--muted); }
   </style>
 </head>
 <body>
@@ -86,6 +92,9 @@
       </button>
       <button type="button" id="open-paths" aria-label="Chemins">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>
+      </button>
+      <button type="button" id="open-trophies" aria-label="Trophies">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h8v3a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v3M9 20h6"/></svg>
       </button>
       <button type="button" id="lang" class="push text-xs" aria-label="Language">EN</button>
       <button type="button" id="music" class="gold" aria-label="Theme">
@@ -122,11 +131,27 @@
           </div>
         </div>
       </div>
+      <div id="trophies" class="panel wide" hidden>
+        <h2 id="trophies-title">Trophies</h2>
+        <p class="muted" id="trophies-hint"></p>
+        <div class="langs" id="trophy-langs"></div>
+        <div id="trophy-list"></div>
+      </div>
     </section>
   </main>
   <audio id="audio" loop></audio>
   <script>
-    const state = { settings: {}, paths: { game: "", update: "", dlc: [] }, media: {} };
+    const state = { settings: {}, paths: { game: "", update: "", dlc: [] }, media: {}, trophies: null };
+    const grades = {
+      en: { Platinum: "Platinum", Gold: "Gold", Silver: "Silver", Bronze: "Bronze" },
+      fr: { Platinum: "Platine", Gold: "Or", Silver: "Argent", Bronze: "Bronze" },
+      ja: { Platinum: "プラチナ", Gold: "ゴールド", Silver: "シルバー", Bronze: "ブロンズ" },
+      es: { Platinum: "Platino", Gold: "Oro", Silver: "Plata", Bronze: "Bronce" },
+      de: { Platinum: "Platin", Gold: "Gold", Silver: "Silber", Bronze: "Bronze" },
+      ko: { Platinum: "플래티넘", Gold: "골드", Silver: "실버", Bronze: "브론즈" },
+      "zh-Hant": { Platinum: "白金", Gold: "金", Silver: "銀", Bronze: "銅" },
+    };
+    let trophyLang = "en";
     const panel = { name: "" };
     const audio = document.querySelector("#audio");
     const note = document.querySelector("#note");
@@ -145,6 +170,8 @@
         "no-pkg": "No .pkg in this folder.",
         "need-game": "Choose the game folder first.",
         "missing-game": "That game folder does not exist.",
+        trophies: "Trophies", trophyHint: "Read from your trophy00.trp. Nothing is sent.",
+        locked: "Locked", unlocked: "Unlocked", hidden: "Hidden", missingTrp: "trophy00.trp was not found in that game folder.",
       },
       fr: {
         home: "Accueil", settings: "Réglages", paths: "Chemins", theme: "Thème", language: "Langue",
@@ -160,6 +187,8 @@
         "no-pkg": "Aucun .pkg dans ce dossier.",
         "need-game": "Choisis d'abord le dossier du jeu.",
         "missing-game": "Ce dossier de jeu n'existe pas.",
+        trophies: "Trophées", trophyHint: "Lu dans ton trophy00.trp. Rien n'est envoyé.",
+        locked: "Fermé", unlocked: "Pris", hidden: "Caché", missingTrp: "trophy00.trp est introuvable dans ce dossier.",
       },
     };
     let lang = "en";
@@ -217,6 +246,7 @@
       document.querySelector("#home").setAttribute("aria-label", t("home"));
       document.querySelector("#open-settings").setAttribute("aria-label", t("settings"));
       document.querySelector("#open-paths").setAttribute("aria-label", t("paths"));
+      document.querySelector("#open-trophies").setAttribute("aria-label", t("trophies"));
       document.querySelector("#music").setAttribute("aria-label", t("theme"));
       document.querySelector("#lang").textContent = lang === "en" ? "EN" : "FR";
       document.documentElement.lang = lang;
@@ -266,8 +296,56 @@
       grid.appendChild(sharpLabel);
       document.querySelector("#open-settings").classList.toggle("on", panel.name === "settings");
       document.querySelector("#open-paths").classList.toggle("on", panel.name === "paths");
+      document.querySelector("#open-trophies").classList.toggle("on", panel.name === "trophies");
       document.querySelector("#settings").hidden = panel.name !== "settings";
       document.querySelector("#paths").hidden = panel.name !== "paths";
+      document.querySelector("#trophies").hidden = panel.name !== "trophies";
+      document.querySelector("#trophies-title").textContent = t("trophies");
+      document.querySelector("#trophies-hint").textContent = t("trophyHint");
+      const langs = document.querySelector("#trophy-langs");
+      const trophyList = document.querySelector("#trophy-list");
+      langs.replaceChildren();
+      trophyList.replaceChildren();
+      const file = state.trophies;
+      if (file && file.languages) {
+        const taken = file.trophies.filter((item) => item.when).length;
+        document.querySelector("#trophies-hint").textContent = t("trophyHint") + "  " + taken + " / " + file.trophies.length;
+        file.languages.forEach((item) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "choice" + (item.id === trophyLang ? " on" : "");
+          button.textContent = item.label;
+          button.addEventListener("click", () => {
+            trophyLang = item.id;
+            state.settings.trophyLang = item.id;
+            save();
+            render();
+          });
+          langs.appendChild(button);
+        });
+        const words = grades[trophyLang] || grades.en;
+        file.trophies.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "trophy";
+          const img = document.createElement("img");
+          img.alt = "";
+          const main = document.createElement("span");
+          const name = document.createElement("b");
+          const grade = document.createElement("small");
+          const copyText = (item.text && (item.text[trophyLang] || item.text.en)) || { name: "", detail: "" };
+          const hidden = item.hidden && !item.when;
+          if (!hidden && item.icon) img.src = item.icon;
+          name.textContent = hidden ? t("hidden") : copyText.name;
+          grade.textContent = words[item.grade] || item.grade;
+          main.append(name, grade);
+          const when = document.createElement("small");
+          when.textContent = item.when ? item.when.replace("T", " ").replace("Z", "") : t("locked");
+          const detail = document.createElement("small");
+          detail.textContent = hidden ? "" : copyText.detail;
+          row.append(img, main, when, detail);
+          trophyList.appendChild(row);
+        });
+      }
     }
 
     async function save() {
@@ -296,6 +374,21 @@
     document.querySelector("#home").addEventListener("click", () => { panel.name = ""; render(); });
     document.querySelector("#open-settings").addEventListener("click", () => { panel.name = panel.name === "settings" ? "" : "settings"; render(); });
     document.querySelector("#open-paths").addEventListener("click", () => { panel.name = panel.name === "paths" ? "" : "paths"; render(); });
+    document.querySelector("#open-trophies").addEventListener("click", async () => {
+      panel.name = panel.name === "trophies" ? "" : "trophies";
+      render();
+      if (panel.name !== "trophies") return;
+      const response = await fetch("/api/trophies");
+      const payload = await response.json();
+      if (!response.ok) {
+        showNote(payload.error === "missing-trp" ? t("missingTrp") : explain(payload.error));
+        return;
+      }
+      state.trophies = payload;
+      const preferred = state.settings.trophyLang || (lang === "fr" ? "fr" : "en");
+      trophyLang = payload.languages.some((item) => item.id === preferred) ? preferred : "en";
+      render();
+    });
     document.querySelector("#pick-game").addEventListener("click", () => pick("game"));
     document.querySelector("#pick-update").addEventListener("click", () => pick("update"));
     document.querySelector("#pick-dlc").addEventListener("click", () => pick("dlc"));
@@ -327,6 +420,7 @@
       Object.assign(state.paths, payload.paths || {});
       state.media = payload.media || {};
       lang = state.settings.lang === "fr" ? "fr" : "en";
+      if (state.settings.trophyLang) trophyLang = state.settings.trophyLang;
       render();
     });
     document.querySelector("#lang").addEventListener("click", () => {
