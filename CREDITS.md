@@ -14,6 +14,7 @@ This is an unofficial Windows port. It does not replace, and is not endorsed by,
 
 - Published by [DiamondDogz](https://github.com/DiamondDogz). This is the Windows packaging and the launcher around the v1.1 runtime. It is not a claim on the runtime, and not a claim on the game.
 - [Grok](https://grok.com), by xAI. The Windows launcher, its page, and the documents in this branch were written with Grok. The runtime was not rewritten by it. See [AI.md](AI.md).
+- [Claude](https://claude.ai), by Anthropic. The game-language choice in the launcher, the one in windows-1.1.4, was written with Claude. The runtime was not rewritten by it.
 
 ## Libraries in the Windows build
 

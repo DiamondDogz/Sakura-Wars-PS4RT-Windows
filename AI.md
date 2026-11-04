@@ -1,6 +1,6 @@
 # Use of AI
 
-AI was used. The assistant was [Grok](https://grok.com), by xAI. This file says where, and where it was not.
+AI was used. The assistants were [Grok](https://grok.com), by xAI, and, for the game language, [Claude](https://claude.ai), by Anthropic. This file says where, and where it was not.
 
 ## Generated pictures and the moving background
 
@@ -20,13 +20,13 @@ You can replace the file. Keep the name `theme.mp3`.
 
 ## The program
 
-The Windows launcher, its page, the install text, and the wiring around the existing runtime were written with Grok, by xAI, then checked against what the build actually does. The Windows port is published by [DiamondDogz](https://github.com/DiamondDogz).
+The Windows launcher, its page, the install text, and the wiring around the existing runtime were written with Grok, by xAI, then checked against what the build actually does. The globe in the launcher, and the four game languages it offers, were written with Claude, by Anthropic. The Windows port is published by [DiamondDogz](https://github.com/DiamondDogz).
 
 The runtime is not an AI rewrite of Sakura-Wars-PS4RT. It is HekamiAeon's program. This branch is his v1.1, built for Windows. Credit for that program stays with HekamiAeon and the people named in [CREDITS.md](CREDITS.md).
 
 ## Take it or leave it
 
-The publisher’s words: yes, a lot of this is AI slop. Take it or leave it. The path to a build that starts the game was long, and Grok made that path painful. Still a good shoggoth.
+The publisher’s words: yes, a lot of this is AI slop. Take it or leave it. The path to a build that starts the game was long, and Grok made that path painful. Still a good shoggoth. Claude is not a second one. Claude is the relative who arrived later and brought the languages.
 
 ## What AI was not allowed to supply
 

@@ -16,7 +16,7 @@ Le jeu lui-même doit être en **01.01**. Ce numéro n'est pas celui du runtime.
 
 Dépôt : `DiamondDogz/Sakura-Wars-PS4RT-Windows`. Compte qui commit : `shinseiryuu`. Branche par défaut : `windows`. Dernière tête connue avant ce fichier : `5b63ed80c8c858c2cc1ba11364cd438fbbc13319`.
 
-C'est un fork du runtime, plus un lanceur Windows écrit par-dessus. Le runtime n'est pas une réécriture. Le crédit du runtime reste à HekamiAeon et aux personnes de `CREDITS.md`. Le lanceur, sa page et les textes ont été écrits avec Grok, par xAI. Le dire dans les crédits. Ne jamais écrire que c'est un premier dépôt.
+C'est un fork du runtime, plus un lanceur Windows écrit par-dessus. Le runtime n'est pas une réécriture. Le crédit du runtime reste à HekamiAeon et aux personnes de `CREDITS.md`. Le lanceur, sa page et les textes ont été écrits avec Grok, par xAI. Le choix de la langue du jeu, dans windows-1.1.4, a été écrit avec Claude, par Anthropic. Le dire dans les crédits. Ne jamais écrire que c'est un premier dépôt. Ne pas retirer l'un des deux.
 
 Non officiel. Aucun lien avec SEGA. Le jeu n'est pas dans le dépôt.
 
@@ -137,7 +137,7 @@ La commande qui produit `ps4rt.exe` depuis cette branche n'est pas encore une re
 
 `README.md`, `README.fr.md`, `INSTALL.md`, `WINDOWS.md`, `CREDITS.md`, `AI.md`, `launcher/BUILD.md`.
 
-Le paragraphe qui décrivait la boucle de pétales dans le README a été retiré. Le crédit Grok reste. `AI.md` dit où l'IA a été utilisée et où elle ne devait pas fournir le jeu, l'illustration officielle, l'opening commercial, une promesse v1.1, ou des kanjis inventés.
+Le paragraphe qui décrivait la boucle de pétales dans le README a été retiré. Les crédits Grok et Claude restent. `AI.md` dit où l'IA a été utilisée et où elle ne devait pas fournir le jeu, l'illustration officielle, l'opening commercial, une promesse v1.1, ou des kanjis inventés.
 
 ## Suite
 

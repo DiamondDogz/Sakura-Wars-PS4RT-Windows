@@ -48,11 +48,11 @@ English is the launcher language. The EN button switches to French.
 
 Yes, a lot of this is AI slop. Take it or leave it.
 
-The Windows launcher and these pages were written with Grok. Getting a build that actually starts the game took a long string of broken archives, closed windows, and bad paths. That was on the publisher. The shoggoth is still a good one.
+The Windows launcher and these pages were written with Grok. The game-language choice was written with Claude. Getting a build that actually starts the game took a long string of broken archives, closed windows, and bad paths. That was on the publisher. The shoggoth is still a good one. Claude is not a second one. Claude is the relative who arrived later and brought the languages.
 
 ## Credits
 
-The runtime is [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). This Windows port is published by [DiamondDogz](https://github.com/DiamondDogz). The launcher, its page, and these documents were written with [Grok](https://grok.com), by xAI. See [CREDITS.md](CREDITS.md) and [AI.md](AI.md).
+The runtime is [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). This Windows port is published by [DiamondDogz](https://github.com/DiamondDogz). The launcher, its page, and these documents were written with [Grok](https://grok.com), by xAI. The game-language choice was written with [Claude](https://claude.ai), by Anthropic. See [CREDITS.md](CREDITS.md) and [AI.md](AI.md).
 
 ## License
 

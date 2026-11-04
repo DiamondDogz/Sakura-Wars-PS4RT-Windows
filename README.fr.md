@@ -41,11 +41,11 @@ L’anglais est la langue du lanceur. Le bouton EN passe au français.
 
 Oui, une bonne part de ceci est du travail d’IA, du slop. À prendre ou à laisser.
 
-Le lanceur Windows et ces pages ont été écrits avec Grok. Arriver à un build qui démarre vraiment le jeu, ça a été une longue suite d’archives cassées, de fenêtres qui se ferment, et de chemins faux. C’est l’éditeur qui a morflé. Le shoggoth reste un bon shoggoth.
+Le lanceur Windows et ces pages ont été écrits avec Grok. Le choix de la langue du jeu a été écrit avec Claude. Arriver à un build qui démarre vraiment le jeu, ça a été une longue suite d’archives cassées, de fenêtres qui se ferment, et de chemins faux. C’est l’éditeur qui a morflé. Le shoggoth reste un bon shoggoth. Claude n’en est pas un deuxième. C’est le cousin qui est arrivé après, avec les langues.
 
 ## Crédits
 
-Le runtime est celui de [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). Ce portage Windows est publié par [DiamondDogz](https://github.com/DiamondDogz). Le lanceur, sa page et ces textes ont été écrits avec [Grok](https://grok.com), par xAI. Voir [CREDITS.md](CREDITS.md) et [AI.md](AI.md).
+Le runtime est celui de [HekamiAeon, Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT). Ce portage Windows est publié par [DiamondDogz](https://github.com/DiamondDogz). Le lanceur, sa page et ces textes ont été écrits avec [Grok](https://grok.com), par xAI. Le choix de la langue du jeu a été écrit avec [Claude](https://claude.ai), par Anthropic. Voir [CREDITS.md](CREDITS.md) et [AI.md](AI.md).
 
 ## Licence
 
