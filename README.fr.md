@@ -10,6 +10,8 @@ Téléchargement : [windows-1.1.2](https://github.com/DiamondDogz/Sakura-Wars-PS
 
 [windows-1.1.3](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.3) est un essai, avec les trophées en local. Rien n’est envoyé. Restez sur windows-1.1.2 si vous n’en voulez pas.
 
+[windows-1.1.4](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.4) est aussi un essai. C’est windows-1.1.3, avec le choix de la langue du jeu dans le lanceur.
+
 La liste est dans le lanceur. Quand le jeu obtient un trophée, une carte s’affiche quelques secondes, sans prendre la manette.
 
 Le bouton globe du lanceur règle la langue du jeu : anglais, français, allemand ou espagnol, les quatre que cette version affiche. Les textes du jeu et les trophées suivent, dès le prochain lancement. Les voix restent en japonais.
