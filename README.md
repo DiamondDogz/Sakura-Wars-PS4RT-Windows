@@ -8,11 +8,11 @@ The earlier Windows release, [windows-1.0](https://github.com/DiamondDogz/Sakura
 
 Unofficial. Not affiliated with SEGA. The game is not included.
 
-Download: [windows-1.1.2](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.2). That archive starts the game. It is the tested v1.1 build. An old NVIDIA driver no longer closes the game on the shader-cache check: the game compiles shaders the normal way instead. The picture does not change. In the game, Insert opens the overlay. Graphics preset is there: Max, High, Medium, Lowest.
+Download: [windows-1.1.4](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.4). That archive starts the game. It is windows-1.1.3 with a game language choice in the launcher. An old NVIDIA driver no longer closes the game on the shader-cache check: the game compiles shaders the normal way instead. The picture does not change. In the game, Insert opens the overlay. Graphics preset is there: Max, High, Medium, Lowest.
 
-[windows-1.1.3](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.3) is an experimental build with local trophies. Nothing is sent. Stay on windows-1.1.2 if you do not want that.
+[windows-1.1.3](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.3) is the earlier experimental build, with local trophies only. Nothing is sent.
 
-[windows-1.1.4](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.4) is also a test. It is windows-1.1.3 with a game language choice in the launcher.
+[windows-1.1.2](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.2) has no trophies. Stay on it if you do not want them.
 
 The list is in the launcher. When the game earns a trophy, a card shows for a few seconds and does not take the controller.
 
