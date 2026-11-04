@@ -14,6 +14,8 @@ Download: [windows-1.1.2](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windo
 
 The list is in the launcher. When the game earns a trophy, a card shows for a few seconds and does not take the controller.
 
+The globe button in the launcher sets the game language: English, French, German or Spanish, the four this version shows. The game text and the trophies follow it from the next Play. Voices stay in Japanese.
+
 ![Trophy card in the game](docs/images/trophy-card.png)
 
 ![Trophy list in the launcher](docs/images/trophy-list.png)

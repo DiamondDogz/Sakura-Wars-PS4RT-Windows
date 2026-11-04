@@ -12,6 +12,8 @@ Téléchargement : [windows-1.1.2](https://github.com/DiamondDogz/Sakura-Wars-PS
 
 La liste est dans le lanceur. Quand le jeu obtient un trophée, une carte s’affiche quelques secondes, sans prendre la manette.
 
+Le bouton globe du lanceur règle la langue du jeu : anglais, français, allemand ou espagnol, les quatre que cette version affiche. Les textes du jeu et les trophées suivent, dès le prochain lancement. Les voix restent en japonais.
+
 ![Carte d’un trophée dans le jeu](docs/images/trophy-card.png)
 
 ![Liste des trophées dans le lanceur](docs/images/trophy-list.png)
