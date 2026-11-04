@@ -59,6 +59,8 @@ Settings this build actually exposes:
 - Anisotropic filtering, applied on the next start.
 - Sharpness.
 
+The globe button opens Game language: English, Français, Deutsch or Español. It sets the game text and the trophies, on the next Play. Voices stay in Japanese. The EN/FR button only changes the launcher.
+
 This build includes the v1.1 graphics presets. In game, Insert opens the overlay. Graphics preset is Max, High, Medium, or Lowest. Max is the game's own effects.
 
 ## Picture and music
@@ -140,6 +142,8 @@ Réglages que ce build expose vraiment :
 - 30 ou 60 images par seconde.
 - Filtrage anisotrope, appliqué au démarrage suivant.
 - Netteté.
+
+Le bouton globe ouvre Langue du jeu : English, Français, Deutsch ou Español. Il règle les textes du jeu et les trophées, au prochain lancement. Les voix restent en japonais. Le bouton EN/FR ne change que le lanceur.
 
 Ce build a les préréglages graphiques de la v1.1. En jeu, Insert ouvre l’incrustation. Le préréglage est Max, High, Medium ou Lowest. Max, ce sont les effets du jeu.
 

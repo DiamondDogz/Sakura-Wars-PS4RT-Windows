@@ -74,7 +74,6 @@
     .dlc span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     input[type="range"] { width: 100%; accent-color: var(--gold); }
     .panel.wide { left: 0; width: auto; }
-    .langs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.75rem; }
     .trophy { display: grid; grid-template-columns: 3rem 1fr auto minmax(8rem, 34%); gap: 0.6rem; align-items: center; width: 100%; min-height: 4.2rem; margin-top: 0.4rem; border: 0; border-radius: 0.7rem; background: #161616; color: var(--paper); text-align: left; padding: 0.4rem 0.6rem; }
     .trophy img { width: 3rem; height: 3rem; object-fit: cover; background: #0c0c0c; }
     .trophy b { display: block; }
@@ -96,7 +95,10 @@
       <button type="button" id="open-trophies" aria-label="Trophies">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h8v3a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v3M9 20h6"/></svg>
       </button>
-      <button type="button" id="lang" class="push text-xs" aria-label="Language">EN</button>
+      <button type="button" id="open-language" aria-label="Game language">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+      </button>
+      <button type="button" id="lang" class="push text-xs" aria-label="Launcher language">EN</button>
       <button type="button" id="music" class="gold" aria-label="Theme">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="16" r="2"/></svg>
       </button>
@@ -131,10 +133,14 @@
           </div>
         </div>
       </div>
+      <div id="language" class="panel" hidden>
+        <h2 id="language-title">Game language</h2>
+        <p class="muted" id="language-hint"></p>
+        <div class="choices" id="game-langs"></div>
+      </div>
       <div id="trophies" class="panel wide" hidden>
         <h2 id="trophies-title">Trophies</h2>
         <p class="muted" id="trophies-hint"></p>
-        <div class="langs" id="trophy-langs"></div>
         <div id="trophy-list"></div>
       </div>
     </section>
@@ -145,12 +151,17 @@
     const grades = {
       en: { Platinum: "Platinum", Gold: "Gold", Silver: "Silver", Bronze: "Bronze" },
       fr: { Platinum: "Platine", Gold: "Or", Silver: "Argent", Bronze: "Bronze" },
-      ja: { Platinum: "プラチナ", Gold: "ゴールド", Silver: "シルバー", Bronze: "ブロンズ" },
       es: { Platinum: "Platino", Gold: "Oro", Silver: "Plata", Bronze: "Bronce" },
       de: { Platinum: "Platin", Gold: "Gold", Silver: "Silber", Bronze: "Bronze" },
-      ko: { Platinum: "플래티넘", Gold: "골드", Silver: "실버", Bronze: "브론즈" },
-      "zh-Hant": { Platinum: "白金", Gold: "金", Silver: "銀", Bronze: "銅" },
     };
+    // CUSA16429 text languages. One choice drives the game and the trophies.
+    const gameLanguages = [
+      { id: "en", label: "English" },
+      { id: "fr", label: "Français" },
+      { id: "de", label: "Deutsch" },
+      { id: "es", label: "Español" },
+    ];
+    function knownGameLang(value) { return gameLanguages.some((item) => item.id === value) ? value : ""; }
     let trophyLang = "en";
     const panel = { name: "" };
     const audio = document.querySelector("#audio");
@@ -172,6 +183,8 @@
         "missing-game": "That game folder does not exist.",
         trophies: "Trophies", trophyHint: "Read from your trophy00.trp. Nothing is sent.",
         locked: "Locked", unlocked: "Unlocked", hidden: "Hidden", missingTrp: "trophy00.trp was not found in that game folder.",
+        gameLang: "Game language", launcherLang: "Launcher language",
+        gameLangHint: "Game text and trophies. Applies on the next Play. Voices stay in Japanese.",
       },
       fr: {
         home: "Accueil", settings: "Réglages", paths: "Chemins", theme: "Thème", language: "Langue",
@@ -189,6 +202,8 @@
         "missing-game": "Ce dossier de jeu n'existe pas.",
         trophies: "Trophées", trophyHint: "Lu dans ton trophy00.trp. Rien n'est envoyé.",
         locked: "Fermé", unlocked: "Pris", hidden: "Caché", missingTrp: "trophy00.trp est introuvable dans ce dossier.",
+        gameLang: "Langue du jeu", launcherLang: "Langue du lanceur",
+        gameLangHint: "Textes du jeu et trophées. S'applique au prochain lancement. Les voix restent en japonais.",
       },
     };
     let lang = "en";
@@ -247,6 +262,8 @@
       document.querySelector("#open-settings").setAttribute("aria-label", t("settings"));
       document.querySelector("#open-paths").setAttribute("aria-label", t("paths"));
       document.querySelector("#open-trophies").setAttribute("aria-label", t("trophies"));
+      document.querySelector("#open-language").setAttribute("aria-label", t("gameLang"));
+      document.querySelector("#lang").setAttribute("aria-label", t("launcherLang"));
       document.querySelector("#music").setAttribute("aria-label", t("theme"));
       document.querySelector("#lang").textContent = lang === "en" ? "EN" : "FR";
       document.documentElement.lang = lang;
@@ -297,32 +314,34 @@
       document.querySelector("#open-settings").classList.toggle("on", panel.name === "settings");
       document.querySelector("#open-paths").classList.toggle("on", panel.name === "paths");
       document.querySelector("#open-trophies").classList.toggle("on", panel.name === "trophies");
+      document.querySelector("#open-language").classList.toggle("on", panel.name === "language");
+      document.querySelector("#language").hidden = panel.name !== "language";
+      document.querySelector("#language-title").textContent = t("gameLang");
+      document.querySelector("#language-hint").textContent = t("gameLangHint");
+      const gameLangs = document.querySelector("#game-langs");
+      gameLangs.replaceChildren();
+      gameLanguages.forEach((item) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "choice" + (item.id === trophyLang ? " on" : "");
+        button.textContent = item.label;
+        button.addEventListener("click", () => {
+          trophyLang = item.id;
+          patch({ gameLang: item.id, trophyLang: item.id });
+        });
+        gameLangs.appendChild(button);
+      });
       document.querySelector("#settings").hidden = panel.name !== "settings";
       document.querySelector("#paths").hidden = panel.name !== "paths";
       document.querySelector("#trophies").hidden = panel.name !== "trophies";
       document.querySelector("#trophies-title").textContent = t("trophies");
       document.querySelector("#trophies-hint").textContent = t("trophyHint");
-      const langs = document.querySelector("#trophy-langs");
       const trophyList = document.querySelector("#trophy-list");
-      langs.replaceChildren();
       trophyList.replaceChildren();
       const file = state.trophies;
       if (file && file.languages) {
         const taken = file.trophies.filter((item) => item.when).length;
         document.querySelector("#trophies-hint").textContent = t("trophyHint") + "  " + taken + " / " + file.trophies.length;
-        file.languages.forEach((item) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "choice" + (item.id === trophyLang ? " on" : "");
-          button.textContent = item.label;
-          button.addEventListener("click", () => {
-            trophyLang = item.id;
-            state.settings.trophyLang = item.id;
-            save();
-            render();
-          });
-          langs.appendChild(button);
-        });
         const words = grades[trophyLang] || grades.en;
         file.trophies.forEach((item) => {
           const row = document.createElement("div");
@@ -374,6 +393,7 @@
     document.querySelector("#home").addEventListener("click", () => { panel.name = ""; render(); });
     document.querySelector("#open-settings").addEventListener("click", () => { panel.name = panel.name === "settings" ? "" : "settings"; render(); });
     document.querySelector("#open-paths").addEventListener("click", () => { panel.name = panel.name === "paths" ? "" : "paths"; render(); });
+    document.querySelector("#open-language").addEventListener("click", () => { panel.name = panel.name === "language" ? "" : "language"; render(); });
     document.querySelector("#open-trophies").addEventListener("click", async () => {
       panel.name = panel.name === "trophies" ? "" : "trophies";
       render();
@@ -385,8 +405,6 @@
         return;
       }
       state.trophies = payload;
-      const preferred = state.settings.trophyLang || (lang === "fr" ? "fr" : "en");
-      trophyLang = payload.languages.some((item) => item.id === preferred) ? preferred : "en";
       trophyWatch = trophyStamp(payload);
       render();
     });
@@ -442,7 +460,9 @@
       Object.assign(state.paths, payload.paths || {});
       state.media = payload.media || {};
       lang = state.settings.lang === "fr" ? "fr" : "en";
-      if (state.settings.trophyLang) trophyLang = state.settings.trophyLang;
+      trophyLang = knownGameLang(state.settings.gameLang) || knownGameLang(state.settings.trophyLang) || (lang === "fr" ? "fr" : "en");
+      state.settings.gameLang = trophyLang;
+      state.settings.trophyLang = trophyLang;
       render();
     });
     document.querySelector("#lang").addEventListener("click", () => {

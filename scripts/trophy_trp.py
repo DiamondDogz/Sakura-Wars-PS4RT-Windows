@@ -31,14 +31,13 @@ _SBOX = (
     0x8C, 0xA1, 0x89, 0x0D, 0xBF, 0xE6, 0x42, 0x68, 0x41, 0x99, 0x2D, 0x0F, 0xB0, 0x54, 0xBB, 0x16,
 )
 _RCON = (0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36)
+# CUSA16429 shows text in English, French, German and Spanish only.
+# trophy00.trp also carries Japanese, Korean and Chinese; the game cannot show them.
 _LANGUAGES = (
     ("TROP.ESFM", "en", "English"),
-    ("TROP_00.ESFM", "ja", "日本語"),
     ("TROP_02.ESFM", "fr", "Français"),
-    ("TROP_03.ESFM", "es", "Español"),
     ("TROP_04.ESFM", "de", "Deutsch"),
-    ("TROP_09.ESFM", "ko", "한국어"),
-    ("TROP_10.ESFM", "zh-Hant", "繁體中文"),
+    ("TROP_03.ESFM", "es", "Español"),
 )
 _GRADES = {"P": "Platinum", "G": "Gold", "S": "Silver", "B": "Bronze"}
 
