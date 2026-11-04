@@ -32,20 +32,35 @@ def quote_command(args) -> str:
     return shlex.join([str(part) for part in args])
 
 
-def trophy_language() -> str:
-    allowed = {'en', 'fr', 'ja', 'es', 'de', 'ko', 'zh-Hant'}
+# The text languages of CUSA16429, with the PS4 system language number the game reads.
+GAME_LANGUAGES = {'en': 1, 'fr': 2, 'es': 3, 'de': 4}
+
+
+def game_language() -> str:
+    """The launcher's Language choice. Older states only had trophyLang or the launcher UI language."""
     try:
         payload = json.loads((ROOT / 'launcher-state.json').read_text(encoding='utf-8'))
         settings = payload.get('settings') or {}
-        chosen = str(settings.get('trophyLang') or settings.get('lang') or '')
-    except (OSError, ValueError):
-        chosen = ''
-    return chosen if chosen in allowed else 'en'
+    except (OSError, ValueError, AttributeError):
+        settings = {}
+    for key in ('gameLang', 'trophyLang', 'lang'):
+        chosen = str(settings.get(key) or '')
+        if chosen in GAME_LANGUAGES:
+            return chosen
+    return 'en'
+
+
+def set_game_language(env: dict) -> None:
+    """One choice drives the game text and the trophies."""
+    chosen = game_language()
+    env['PS4RT_LANGUAGE'] = str(GAME_LANGUAGES[chosen])
+    env['PS4RT_TROPHY_LANG'] = chosen
+    print(f'Language: {chosen}', flush=True)
 
 
 def prepare_trophy_card(game: Path, original: Path, user_dir: Path, env: dict) -> None:
     """Read trophy00.trp from the game folder into the writable user dir. Never fails the launch."""
-    env['PS4RT_TROPHY_LANG'] = trophy_language()
+    env.setdefault('PS4RT_TROPHY_LANG', game_language())
     trp = None
     for folder in (game, original):
         candidate = Path(folder) / 'sce_sys' / 'trophy' / 'trophy00.trp'
@@ -283,6 +298,7 @@ def main(argv=None) -> int:
     env['PS4RT_RESTART_COMMAND'] = quote_command(restart)
     env['PS4RT_GPU_USER_DIR'] = str(gpu_user)
     env['PS4RT_TROPHY_FILE'] = str(user_dir / 'trophies.json')
+    set_game_language(env)
     prepare_trophy_card(game, original_game, user_dir, env)
     env['PS4RT_CONFIG'] = str(out / 'ps4rt.ini')
     env.setdefault('PS4RT_FSR4_DIR', str(ROOT / 'fsr4_shaders'))

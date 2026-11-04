@@ -12,7 +12,11 @@ Download: [windows-1.1.2](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windo
 
 [windows-1.1.3](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.3) is an experimental build with local trophies. Nothing is sent. Stay on windows-1.1.2 if you do not want that.
 
+[windows-1.1.4](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.4) is also a test. It is windows-1.1.3 with a game language choice in the launcher.
+
 The list is in the launcher. When the game earns a trophy, a card shows for a few seconds and does not take the controller.
+
+The globe button in the launcher sets the game language: English, French, German or Spanish, the four this version shows. The game text and the trophies follow it from the next Play. Voices stay in Japanese.
 
 ![Trophy card in the game](docs/images/trophy-card.png)
 
