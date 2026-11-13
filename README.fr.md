@@ -6,7 +6,7 @@ La release précédente, [windows-1.0](https://github.com/DiamondDogz/Sakura-War
 
 Non officiel. Aucun lien avec SEGA. Le jeu n’est pas inclus.
 
-Téléchargement : [windows-1.1.4](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.4). Cette archive démarre le jeu. C’est windows-1.1.3, avec le choix de la langue du jeu dans le lanceur. Un vieux pilote NVIDIA ne ferme plus le jeu au contrôle du cache de shaders : le jeu les compile normalement. L’image ne change pas. En jeu, Insert ouvre l’incrustation. Le préréglage graphique y est : Max, High, Medium, Lowest.
+Téléchargement : [windows-1.1.5](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.5). Cette archive démarre le jeu. C’est windows-1.1.4 avec un nouveau runtime : avec [Crowbar](https://github.com/DiamondDogz/crowbar), le bouton Guide met le jeu en pause (`src/runtime_crowbar_pause.c`). windows-1.1.4 était windows-1.1.3, avec le choix de la langue du jeu dans le lanceur. Un vieux pilote NVIDIA ne ferme plus le jeu au contrôle du cache de shaders : le jeu les compile normalement. L’image ne change pas. En jeu, Insert ouvre l’incrustation. Le préréglage graphique y est : Max, High, Medium, Lowest.
 
 [windows-1.1.3](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.3) est l’essai précédent, avec seulement les trophées en local. Rien n’est envoyé.
 
