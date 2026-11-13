@@ -1,0 +1,116 @@
+name: Test build
+
+# Compiles bin/ps4rt.exe from this branch with MSYS2 CLANG64 (the commands of
+# scripts/build_windows.sh, natively), puts it with the DLLs it needs into the player archive of
+# windows-1.1.4 (launcher and everything else unchanged), and publishes the result as a
+# pre-release windows-1.1.5-pause.N: Crowbar offers it like any runtime version.
+on:
+  push:
+    branches: ["crowbar-pause"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: test-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      VERSION: 1.1.5-pause.${{ github.run_number }}
+      BASE: windows-1.1.4
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Git settings
+        shell: pwsh
+        run: |
+          git config --system core.longpaths true
+          git config --system core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+          install: >-
+            git
+            python
+            zip
+            unzip
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-vulkan-devel
+            mingw-w64-clang-x86_64-glslang
+            mingw-w64-clang-x86_64-sdl3
+            mingw-w64-clang-x86_64-ffmpeg
+            mingw-w64-clang-x86_64-fmt
+            mingw-w64-clang-x86_64-boost
+            mingw-w64-clang-x86_64-robin-map
+            mingw-w64-clang-x86_64-xxhash
+            mingw-w64-clang-x86_64-zydis
+            mingw-w64-clang-x86_64-vulkan-memory-allocator
+            mingw-w64-clang-x86_64-spirv-headers
+      - name: GPU library
+        run: |
+          cmake -S gpu -B out/gpu-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DPS4RT_PGO=off -DPS4RT_LTO=OFF \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_ASM_COMPILER=clang
+          ninja -C out/gpu-windows -j 4 ps4rtgpu
+      - name: ps4rt.exe
+        run: |
+          obj=out/ps4rt-windows
+          mkdir -p "$obj/atrac9"
+          for source in third_party/LibAtrac9/C/src/*.c; do
+            clang -std=c99 -O2 -w -c "$source" -o "$obj/atrac9/$(basename "${source%.c}").o"
+          done
+          clang -std=c11 -O2 -Wall -Wextra -Werror -mgeneral-regs-only -c src/isa_emulate.c -o "$obj/isa_emulate.o"
+          clang -c src/compat_win_jmp.s -o "$obj/compat_win_jmp.o"
+          for source in src/compat_win.c src/loader.c src/cpu_check.c src/isa_rewrite.c src/runtime.c src/runtime_*.c; do
+            clang -std=c11 -O2 -Wall -Wextra -Werror -DPS4RT_RUNTIME -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 \
+              -I. -Isrc -c "$source" -o "$obj/$(basename "${source%.c}").o"
+          done
+          g=out/gpu-windows
+          clang++ -O2 -o out/ps4rt.exe "$obj"/*.o "$obj"/atrac9/*.o \
+            -L$g -lps4rtgpu \
+            -L$g/third_party/fsr-vulkan -lffx_vulkan_portable -lffx_vulkan_fsr3_vk_backend_1_1_4 \
+              -lffx_vulkan_fsr3_host_1_1_4 -lffx_vulkan_fsr4_v07_vulkan -lffx_vulkan_fsr4_v07_assets \
+            -L$g/third_party/sirit/src -lsirit \
+            -L$g/third_party/miniz -lminiz \
+            -lvulkan-1 -lSDL3 -lavformat -lavcodec -lavutil -lswscale -lswresample -lxxhash -lZydis \
+            -lbcrypt -lws2_32 -lshell32 -luser32 -lwinpthread -lpdh \
+            -Wl,--disable-high-entropy-va
+          ls -l out/ps4rt.exe
+      - name: Player archive
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist base
+          gh release download "$BASE" -p '*.zip' -D dl
+      - name: Runtime and the DLLs it needs
+        run: |
+          (cd base && unzip -q ../dl/*.zip)
+          exe=$(find base -path '*bin/ps4rt.exe' | head -1)
+          [[ -n $exe ]] || { echo "no bin/ps4rt.exe in $BASE"; exit 1; }
+          bin=$(dirname "$exe")
+          cp -f out/ps4rt.exe "$bin/ps4rt.exe"
+          ldd out/ps4rt.exe | awk '/clang64/ {print $3}' | sort -u | while read -r dll; do cp -f "$dll" "$bin/"; done
+          name=Kagekidan-windows-$VERSION
+          top=$(ls base)
+          if [[ $(ls base | wc -l) == 1 && -d base/$top && $top == Kagekidan* ]]; then mv "base/$top" "base/$name"; (cd base && zip -qr -9 "../dist/$name.zip" "$name"); else (cd base && zip -qr -9 "../dist/$name.zip" .); fi
+          (cd dist && sha256sum "$name.zip" > "$name.zip.sha256" && cat "$name.zip.sha256")
+      - name: Publish the pre-release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="windows-$VERSION"
+          sha=$(cut -d' ' -f1 dist/*.sha256)
+          printf '%s with a runtime built from branch %s (%s): pause from Crowbar'"'"'s Guide menu (crowbar-sdk 1.2). The launcher is unchanged.\n\nSHA-256: %s\n' "$BASE" "$GITHUB_REF_NAME" "${GITHUB_SHA:0:7}" "$sha" > notes.md
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --prerelease --title "$TAG" --notes-file notes.md
