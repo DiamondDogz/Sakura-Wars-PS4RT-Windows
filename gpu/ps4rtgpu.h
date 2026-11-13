@@ -6,6 +6,13 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+/* Functions the game's own code calls (the loader patches its calls to them): the System V ABI
+ * of the PS4, which is not the default on Windows. */
+#if defined(_WIN32)
+#define PS4RTGPU_GUEST_ABI __attribute__((sysv_abi))
+#else
+#define PS4RTGPU_GUEST_ABI
+#endif
 typedef struct {
     const char *title;          /* window title */
     const char *serial;         /* CUSA id, names the pipeline cache */
@@ -22,6 +29,18 @@ int ps4rtgpu_init(const Ps4RtGpuConfig *config);
 uintptr_t ps4rtgpu_resolve(const char *scoped_nid);
 /* Called first by the loader's SIGSEGV handler: 1 when a GPU page-tracking fault was handled. */
 int ps4rtgpu_handle_fault(void *ucontext, void *address);
+/* Sakura Wars: memcpy of a new GPU buffer's initial data (see ps4rtgpu.cpp). */
+PS4RTGPU_GUEST_ABI void *ps4rtgpu_new_buffer_copy(void *dst, const void *src, uint64_t size);
+/* Sakura Wars: GpuAddress::tileSurfaceRegion's calls of its 1D and 2D region loops (see
+ * ps4rtgpu.cpp); set_tile_region(_2d) gives them the game's loop to call. */
+void ps4rtgpu_set_tile_region(uintptr_t loop);
+PS4RTGPU_GUEST_ABI int ps4rtgpu_tile_surface_region(const void *params, void *dst, const void *src,
+                                 const uint32_t *region, uint32_t src_pitch,
+                                 uint32_t src_slice_pitch);
+void ps4rtgpu_set_tile_region_2d(uintptr_t loop);
+PS4RTGPU_GUEST_ABI int ps4rtgpu_tile_surface_region_2d(const void *params, void *dst, const void *src,
+                                    const uint32_t *region, uint32_t src_pitch,
+                                    uint32_t src_slice_pitch);
 /* PS4RT_WRITE_LOG=1: prints the logged GPU-side writes to guest memory near the fault. */
 void ps4rtgpu_dump_guest_writes(void *ucontext);
 /* Keyboard text entry through the game window (IME dialog). begin returns 0 when

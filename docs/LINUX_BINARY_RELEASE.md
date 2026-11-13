@@ -1,16 +1,16 @@
-# Run the Sakura Wars PS4RT Linux x86-64 release (v1.0)
+# Run the Sakura Wars PS4RT Linux x86-64 release (v1.1)
 
 **For players: download the portable Linux runtime, extract it, and point the launcher at your own game. No compilation, separate PKG extractor, or manual FFmpeg/SDL3 installation is required.**
 
 ## 1. Download the right file
 
-Open the [Sakura Wars PS4RT v1.0 GitHub release](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/tag/v1.0)
+Open the [Sakura Wars PS4RT v1.1 GitHub release](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/tag/v1.1)
 (or [the latest release](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/latest)). Download:
 
-- **[Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.0/Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz)**: prebuilt Linux runtime. **Choose this to play.**
-- [Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz.sha256](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.0/Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz.sha256): SHA256 verification file for the runtime.
-- [Sakura-Wars-PS4RT-85ac44f-source.tar.gz](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.0/Sakura-Wars-PS4RT-85ac44f-source.tar.gz): matching source code for developers, **not required just to play**.
-- [Sakura-Wars-PS4RT-85ac44f-source.tar.gz.sha256](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.0/Sakura-Wars-PS4RT-85ac44f-source.tar.gz.sha256): SHA256 verification file for the source archive.
+- **[Sakura-Wars-PS4RT-29f8822-linux-x86_64.tar.gz](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.1/Sakura-Wars-PS4RT-29f8822-linux-x86_64.tar.gz)**: prebuilt Linux runtime. **Choose this to play.**
+- [Sakura-Wars-PS4RT-29f8822-linux-x86_64.tar.gz.sha256](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.1/Sakura-Wars-PS4RT-29f8822-linux-x86_64.tar.gz.sha256): SHA256 verification file for the runtime.
+- [Sakura-Wars-PS4RT-29f8822-source.tar.gz](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.1/Sakura-Wars-PS4RT-29f8822-source.tar.gz): matching source code for developers, **not required just to play**.
+- [Sakura-Wars-PS4RT-29f8822-source.tar.gz.sha256](https://github.com/HekamiAeon/Sakura-Wars-PS4RT/releases/download/v1.1/Sakura-Wars-PS4RT-29f8822-source.tar.gz.sha256): SHA256 verification file for the source archive.
 
 These are the four uploaded release assets. GitHub's automatic “Source code”
 ZIP/tarball links are different from the matching source package above.
@@ -19,7 +19,7 @@ To verify your runtime download, save the Linux `.tar.gz` and its `.sha256`
 in the same directory and run:
 
 ```bash
-sha256sum -c Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz.sha256
+sha256sum -c Sakura-Wars-PS4RT-29f8822-linux-x86_64.tar.gz.sha256
 ```
 
 It should report `OK`.
@@ -46,14 +46,16 @@ Extract the Linux archive using your file manager, or in the directory
 containing the downloaded runtime:
 
 ```bash
-tar -xzf Sakura-Wars-PS4RT-85ac44f-linux-x86_64.tar.gz
-cd Sakura-Wars-PS4RT-85ac44f-linux-x86_64
+tar -xzf Sakura-Wars-PS4RT-29f8822-linux-x86_64.tar.gz
+cd Sakura-Wars-PS4RT-29f8822-linux-x86_64
 bash Play-Game.sh --game "/path/to/CUSA16429"
 ```
 
 Replace the quoted path with the location of **your own extracted game folder**. Keep the entire extracted PS4RT directory together and writable: prepared game files, settings, saves, shader caches and installed DLC live under that directory.
 
 **Important: The v1.00 update changes the game folder you selected in place.** The installer does not make a backup of the original base game. If you want to preserve pristine v1.00, duplicate the extracted game directory before pointing the launcher at it. Your update PKG is not modified.
+
+**Later launches:** After successful first-time preparation, run `bash Play-Game.sh` without `--game`. The player remembers the validated CUSA16429 directory. Supply `--game` again if it moves. With no configured game path, the launcher prints an example command and directs you to `PLAYER_README.txt` in the extracted player folder.
 
 ### First-run setup
 
@@ -63,12 +65,6 @@ Replace the quoted path with the location of **your own extracted game folder**.
 - **Subsequent starts:** No initial setup prompt repeats. DLC can be installed later via the in-game overlay.
 
 The portable bundles its own graphical installer and native PKG extractor. No Tkinter, KDialog, Zenity, or external `ps4-pkg` installation is needed. See [Player update and DLC setup](PLAYER_PKG_SETUP.md) for troubleshooting and the exact DLC workflow.
-
-## 4. In-game controls and graphics
-
-Open the PS4RT menu using **Insert** on a keyboard or **L2 + R3 click** on a controller. Navigate with the D-pad, Cross to select, and Circle to go back (typical Xbox-style controllers use A/B equivalents).
-
-The menu includes **1080p / 1440p / 4K** output, **Off / FSR 3.1 / FSR 4 v07** upscaling where supported, sharpening, anisotropic filtering, display/VSync controls, silhouette/outline options, and **30 / experimental 60 FPS**. Some graphics settings apply live; anisotropic filtering requires a game restart. 4K output does not mean the original scene is rasterized natively at 4K.
 
 Optional command-line overrides are available:
 
@@ -84,5 +80,3 @@ After installing DLC from **Game > Install DLC...** in the overlay, save your ga
 - Working Vulkan 1.3-capable graphics driver/loader and compatible desktop display/input environment. FSR 4 depends on additional compatible device features and falls back to other supported options when unavailable.
 - Fedora Linux with AMD/RADV/NVIDIA graphics has been gameplay-tested.
 - The portable bundles its audited application libraries, including SDL3, FFmpeg and Crypto++. **Do not install separate versions or set `LD_LIBRARY_PATH` merely to run the portable.**
-
-This is an **experimental, title-specific** PS4 native compatibility runtime, not a general PS4 emulator. Testing has reached Chapters 1–3; the full game has **not** been verified end-to-end as of 10/28/2026. For developer instructions, see [Linux distribution guide](DISTRIBUTING_LINUX.md), [Running on Linux](RUNNING_LINUX.md), and [`packaging/linux/README.md`](../packaging/linux/README.md).

@@ -50,33 +50,30 @@ def game_language() -> str:
     return 'en'
 
 
-def set_game_language(env: dict) -> None:
-    """One choice drives the game text and the trophies."""
-    chosen = game_language()
-    env['PS4RT_LANGUAGE'] = str(GAME_LANGUAGES[chosen])
-    env['PS4RT_TROPHY_LANG'] = chosen
-    print(f'Language: {chosen}', flush=True)
+def set_game_language(user_dir: Path, ini: Path) -> None:
+    """Kagekidan's Language choice, handed to the in-game Game language option.
 
-
-def prepare_trophy_card(game: Path, original: Path, user_dir: Path, env: dict) -> None:
-    """Read trophy00.trp from the game folder into the writable user dir. Never fails the launch."""
-    env.setdefault('PS4RT_TROPHY_LANG', game_language())
-    trp = None
-    for folder in (game, original):
-        candidate = Path(folder) / 'sce_sys' / 'trophy' / 'trophy00.trp'
-        if candidate.is_file():
-            trp = candidate
-            break
-    if trp is None:
+    Since v1.2 the console language lives in user/console.ini and the overlay changes it. A new
+    choice in Kagekidan becomes a pending choice (language=<id> in ps4rt.ini), applied like one made
+    in the overlay; the same choice on the next launch changes nothing, so a later overlay choice
+    stays. user/kagekidan-language remembers the last choice handed over.
+    """
+    chosen = GAME_LANGUAGES[game_language()]
+    marker = user_dir / 'kagekidan-language'
+    try:
+        last = marker.read_text(encoding='utf-8').strip()
+    except OSError:
+        last = ''
+    if last == str(chosen):
         return
     try:
-        from trophy_trp import write_card_cache
-        card_dir = user_dir / 'trophy-card'
-        count = write_card_cache(trp, card_dir, env['PS4RT_TROPHY_LANG'])
-        env['PS4RT_TROPHY_CARD_DIR'] = str(card_dir)
-        print(f'Trophy card cache: {count}', flush=True)
-    except (OSError, ValueError, KeyError):
-        print('Trophy card cache skipped.', flush=True)
+        if (_ini_value(ini, 'language') or '-1') == '-1':
+            _write_ini_value(ini, 'language', str(chosen))
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(str(chosen), encoding='utf-8')
+        print(f'Language from Kagekidan: {chosen}', flush=True)
+    except OSError as error:
+        print(f'Language from Kagekidan not applied: {error}', flush=True)
 
 
 def runtime_binary() -> Path:
@@ -87,6 +84,179 @@ def runtime_binary() -> Path:
             if candidate.is_file():
                 return candidate
     return ROOT / 'bin' / ('ps4rt.exe' if os.name == 'nt' else 'ps4rt')
+
+
+# Game language: Sakura Wars reads the console's system language at every boot
+# (sceSystemServiceParamGetInt, parameter 1) and shows its text in that language; its own saves
+# hold no language. The overlay's choice is therefore the emulated console language, a PS4 system
+# language ID (not a game-private index and not a trophy locale). Only languages verified in game
+# for the EU v1.01 build are offered, in menu order. Its text exists in English, French, German
+# and Spanish; every other ID, Japanese (0) included, shows English, and the regional IDs 18
+# (en-GB), 20 (es-419) and 22 (fr-CA) show the same text as 1, 3 and 2.
+CONSOLE_LANGUAGES = (
+    (1, 'English'),
+    (2, 'French'),
+    (4, 'German'),
+    (3, 'Spanish'),
+)
+DEFAULT_CONSOLE_LANGUAGE = 1  # English (US): what this port always reported before the option
+MAX_SYSTEM_LANGUAGE = 30
+
+# Internal render resolutions saved by the in-game menu (gpu/shim/ps4rt_graphics.h Resolutions,
+# applied on restart). 'native' is the game's own 1920x1080 and sets nothing; for the others the
+# loader (src/loader.c) gives the engine its own --res/--renderres options and sizes the render
+# target pool, GPU heap and direct memory. Wider than 16:9 is experimental.
+RENDER_RESOLUTIONS = {
+    '720p': '1280x720', '540p': '1024x576', '1440p': '2560x1440', '2160p': '3840x2160',
+    '2560x1080': '2560x1080', '3440x1440': '3440x1440', '3840x1440': '3840x1440',
+    '3840x1080': '3840x1080', '5120x1440': '5120x1440',
+}
+
+
+def _internal_resolution(ini: Path, env: dict) -> None:
+    """PS4RT_INTERNAL_RES from the ini's render_resolution; an explicit caller value wins.
+
+    A value this launcher took from the ini on an earlier launch (inherited through "Apply and
+    restart") is not the caller's: drop it so the newly saved choice applies.
+    """
+    if env.pop('PS4RT_INTERNAL_RES_FROM_INI', None):
+        env.pop('PS4RT_INTERNAL_RES', None)
+    if 'PS4RT_INTERNAL_RES' in env:
+        return
+    size = RENDER_RESOLUTIONS.get((_ini_value(ini, 'render_resolution') or '').lower())
+    if size:
+        env['PS4RT_INTERNAL_RES'] = size
+        env['PS4RT_INTERNAL_RES_FROM_INI'] = '1'
+
+
+def _language_id(text) -> int | None:
+    """A PS4 system language ID, or None for anything else."""
+    try:
+        value = int(str(text).strip())
+    except ValueError:
+        return None
+    return value if 0 <= value <= MAX_SYSTEM_LANGUAGE else None
+
+
+def _ini_value(path: Path, key: str) -> str | None:
+    try:
+        lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+    except OSError:
+        return None
+    found = None
+    for line in lines:
+        name, sep, value = line.partition('=')
+        if sep and name.strip() == key:
+            found = value.strip()
+    return found
+
+
+def _write_ini_value(path: Path, key: str, value: str, header: str = '') -> None:
+    """Replace (or add) one key, keeping every other line, with an atomic file replacement."""
+    try:
+        lines = path.read_text(encoding='utf-8').splitlines()
+    except FileNotFoundError:
+        lines = [header] if header else []
+    out, done = [], False
+    for line in lines:
+        if line.partition('=')[0].strip() == key and '=' in line:
+            if not done:
+                out.append(f'{key}={value}')
+            done = True
+        else:
+            out.append(line)
+    if not done:
+        out.append(f'{key}={value}')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp = tempfile.mkstemp(prefix=f'.{path.name}.', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            stream.write('\n'.join(out) + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp, path)
+    except BaseException:
+        try:
+            os.unlink(temp)
+        except OSError:
+            pass
+        raise
+
+
+def _console_language(user_dir: Path, ini: Path, env: dict) -> int:
+    """Choose this launch's console language and tell the runtime and the overlay.
+
+    The emulated console keeps its language in user/console.ini, like a PS4 system setting.
+    ps4rt.ini only carries a pending overlay choice (language=-1 when there is none). A valid
+    pending choice becomes the console language before the game starts and is cleared once it
+    is stored. Without one, an explicit PS4RT_LANGUAGE from the caller wins for this launch only,
+    then the stored console language, then English (US), the port's previous behaviour.
+    """
+    console = user_dir / 'console.ini'
+    names = dict(CONSOLE_LANGUAGES)
+    raw_env = env.pop('PS4RT_LANGUAGE', None)
+    env.pop('PS4RT_LANGUAGE_CHOICES', None)
+    explicit = _language_id(raw_env) if raw_env not in (None, '') else None
+    if raw_env not in (None, '') and explicit is None:
+        print(f'PS4RT: ignoring invalid PS4RT_LANGUAGE={raw_env!r}', flush=True)
+    stored = _language_id(_ini_value(console, 'language') or '')
+    raw_pending = _ini_value(ini, 'language')
+    pending = None
+    if raw_pending is not None:
+        try:
+            pending = int(raw_pending)
+        except ValueError:
+            pending = -2  # damaged: never applied, cleared below
+    active = explicit if explicit is not None else stored
+    if pending is not None and pending != -1:
+        if pending in names:
+            active = pending
+            try:
+                _write_ini_value(console, 'language', str(pending),
+                                 '# Emulated console settings (PS4 system language ID)')
+                stored = pending
+                _write_ini_value(ini, 'language', '-1')
+                print(f'PS4RT: game language set to {names[pending]}', flush=True)
+            except OSError as error:
+                # Use it for this launch; the pending choice stays and is retried next time.
+                print(f'PS4RT: could not store the game language ({error}); '
+                      f'using {names[pending]} for this launch only', flush=True)
+        else:
+            print(f'PS4RT: ignoring unsupported game language {raw_pending!r}', flush=True)
+            try:
+                _write_ini_value(ini, 'language', '-1')
+            except OSError:
+                pass
+    if active is None:
+        active = DEFAULT_CONSOLE_LANGUAGE
+    choices = list(CONSOLE_LANGUAGES)
+    if active not in names:  # a manual override: show it rather than a wrong selection
+        choices.append((active, f'Other (system language {active})'))
+    env['PS4RT_LANGUAGE'] = str(active)
+    env['PS4RT_LANGUAGE_CHOICES'] = '|'.join(f'{i}={label}' for i, label in choices)
+    return active
+
+
+def _achievements(title_id: str, game: Path, user_dir: Path, env: dict) -> None:
+    """Prepare the local trophy catalog (adapted from the Code Fairy port).
+
+    The game still decides every unlock. Text, icons and unlock state live in
+    the runtime user area; the installed game files are only read. A missing
+    or damaged trophy archive must never prevent the game from starting.
+    """
+    from trophy_catalog import prepare_catalog, trophy_language
+    env.pop('PS4RT_TROPHY_CATALOG', None)
+    # Crowbar's test profile gives its own folder: the real achievements stay untouched.
+    env['PS4RT_ACHIEVEMENTS_DIR'] = env.get('PS4RT_ACHIEVEMENTS_DIR') or str(user_dir / 'achievements')
+    try:
+        language = int(env.get('PS4RT_LANGUAGE', '1'))
+        language = trophy_language(title_id, user_dir, language)
+        env['PS4RT_TROPHY_LANGUAGE'] = str(language)
+        catalog = prepare_catalog(game, user_dir, language)
+        if catalog is not None:
+            env['PS4RT_TROPHY_CATALOG'] = str(catalog)
+    except Exception as error:  # any metadata problem: play without achievements
+        print(f'Achievements unavailable: {error}', flush=True)
 
 
 def _select_game_folder(explicit: Path | None, remembered: Path) -> Path:
@@ -191,7 +361,7 @@ def main(argv=None) -> int:
     parser.add_argument('--no-dialogs', action='store_true',
                         help='Do not open setup dialogs (scripting/headless)')
     parser.add_argument('--prepare-only', action='store_true')
-    parser.add_argument('--upscaler', choices=('off', 'fsr3', 'fsr4'),
+    parser.add_argument('--upscaler', choices=('off', 'fsr1', 'fsr3', 'fsr4'),
                         help='Override the saved graphics setting for this launch')
     parser.add_argument('--output-resolution', choices=('1080', '1440', '4k'))
     args = parser.parse_args(argv)
@@ -297,11 +467,15 @@ def main(argv=None) -> int:
         restart += ['--dlc', str(args.dlc.expanduser().resolve())]
     env['PS4RT_RESTART_COMMAND'] = quote_command(restart)
     env['PS4RT_GPU_USER_DIR'] = str(gpu_user)
-    env['PS4RT_TROPHY_FILE'] = str(user_dir / 'trophies.json')
-    set_game_language(env)
-    prepare_trophy_card(game, original_game, user_dir, env)
+    # Crowbar's trophy file (crowbar-sdk), written beside the runtime's own achievements.
+    env.setdefault('PS4RT_TROPHY_FILE', str(user_dir / 'trophies.json'))
     env['PS4RT_CONFIG'] = str(out / 'ps4rt.ini')
     env.setdefault('PS4RT_FSR4_DIR', str(ROOT / 'fsr4_shaders'))
+    set_game_language(user_dir, out / 'ps4rt.ini')
+    # Before the trophy catalog: trophy text follows the console language.
+    _console_language(user_dir, out / 'ps4rt.ini', env)
+    _achievements(title_id, game, user_dir, env)
+    _internal_resolution(out / 'ps4rt.ini', env)
     if args.upscaler is not None:
         env['PS4RT_UPSCALER'] = args.upscaler
     if args.output_resolution is not None:

@@ -7,6 +7,7 @@
 #define _GNU_SOURCE
 #include "runtime.h"
 #include "gpu/ps4rtgpu.h"
+#include "gpu/shim/ps4rt_trophy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,7 +40,6 @@
 #define PLAYGO_BAD_SIZE ((int32_t)0x80B2000B)
 #define PLAYGO_BAD_CHUNK ((int32_t)0x80B2000C)
 #define AUDIO_IN_NOT_OPENED ((int32_t)0x80260109)
-#define TROPHY_INVALID ((int32_t)0x80551604)
 
 static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
 static int next_id=1;
@@ -72,11 +72,32 @@ static ABI int32_t user_event(int32_t *event) {
 }
 
 /* ---- SystemService ---- */
-static int language(void) { const char *v=getenv("PS4RT_LANGUAGE"); return v ? atoi(v) : 1; }
+/* The console's system language as a PS4 system language ID (0 Japanese, 1 English US, 3 Spanish,
+ * ...). ps4rt_launch.py sets PS4RT_LANGUAGE from the overlay's Game language choice. Anything that
+ * is not an ID (empty, text, out of range) is English (US), the default before this option existed.
+ * The value is fixed for the run and logged once so a launch shows what the game was told. */
+static int language(void) {
+    static int cached=-1;
+    pthread_mutex_lock(&lock);
+    if (cached<0) {
+        const char *v=getenv("PS4RT_LANGUAGE");
+        char *end=NULL;
+        long id=v&&*v ? strtol(v,&end,10) : 1;
+        if (v&&*v&&(*end||id<0||id>30)) {
+            fprintf(stderr,"Runtime: ignoring invalid PS4RT_LANGUAGE=%s (using 1, English US)\n",v);
+            id=1;
+        }
+        cached=(int)id;
+        printf("Runtime: SystemService: system language %d\n",cached);
+    }
+    int id=cached;
+    pthread_mutex_unlock(&lock);
+    return id;
+}
 static ABI int32_t system_param(int32_t id,int32_t *value) {
     if (!value) return SYSTEM_PARAMETER;
     switch (id) {
-    case 1: *value=language(); break;           /* language (1 = English US, 8 = Russian) */
+    case 1: *value=language(); break;           /* system language ID (1 = English US) */
     case 2: *value=1; break;                    /* date format DD/MM/YYYY */
     case 3: *value=1; break;                    /* 24-hour clock */
 #ifdef _WIN32
@@ -575,14 +596,24 @@ static ABI int32_t ime_result(uint32_t *result) {
 }
 static ABI int32_t ime_term(void) { memset(&ime,0,sizeof(ime)); return 0; }
 
-/* ---- Trophies: accepted locally, recorded in the log ---- */
+/* ---- Trophies: the game decides every unlock; ps4rt_achievements.cpp persists it ----
+ * Local achievements (adapted from the Code Fairy port): per-user, per-trophy-set state
+ * under PS4RT_ACHIEVEMENTS_DIR, metadata from the launcher's PS4RT_TROPHY_CATALOG. With
+ * no usable catalog the backend keeps this runtime's original accept-and-log contract. */
 static ABI int32_t trophy_context(int32_t *ctx,int32_t user,uint32_t label,uint64_t options) {
-    (void)user; (void)label; (void)options;
-    if (!ctx) return TROPHY_INVALID;
-    *ctx=new_id(); return 0;
+    return ps4rt_trophy_create_context(ctx,user,label,options);
 }
-static ABI int32_t trophy_handle(int32_t *handle) { if (!handle) return TROPHY_INVALID; *handle=new_id(); return 0; }
-static ABI int32_t trophy_register(int32_t ctx,int32_t handle,uint64_t options) { (void)ctx; (void)handle; (void)options; return 0; }
+static ABI int32_t trophy_handle(int32_t *handle) { return ps4rt_trophy_create_handle(handle); }
+/* The game's registered trophy context and handle, for an unlock asked by Crowbar (crowbar-sdk 1.3,
+ * "unlock" in PS4RT_CONTROL_DIR): it then goes through trophy_unlock like the game's own. */
+static int32_t crowbar_ctx=-1, crowbar_handle=-1;
+static ABI int32_t trophy_register(int32_t ctx,int32_t handle,uint64_t options) {
+    int32_t r=ps4rt_trophy_register(ctx,handle,options);
+    if (r==0) { __atomic_store_n(&crowbar_handle,handle,__ATOMIC_RELEASE); __atomic_store_n(&crowbar_ctx,ctx,__ATOMIC_RELEASE); }
+    return r;
+}
+/* Crowbar's trophy file (crowbar-sdk, PS4RT_TROPHY_FILE), kept beside the runtime's own
+ * achievements: Crowbar and Kagekidan read it. */
 static void trophy_note(int32_t id) {
     const char *path=getenv("PS4RT_TROPHY_FILE");
     if (!path || !path[0] || id<0 || id>127) return;
@@ -629,35 +660,31 @@ static void trophy_note(int32_t id) {
     fputs("}}\n",out);
     fclose(out);
 }
-/* The card is drawn by the overlay. A build without that symbol still answers the game. */
-#if defined(__GNUC__)
-__attribute__((weak))
-#endif
-void ps4rtgpu_trophy_card(int32_t id) { (void)id; }
 static ABI int32_t trophy_unlock(int32_t ctx,int32_t handle,int32_t id,int32_t *platinum) {
-    (void)ctx; (void)handle;
-    trophy_note(id); /* recorded aside; the answer below stays the one the game already gets */
-    ps4rtgpu_trophy_card(id);
-    if (platinum) *platinum=-1;
-    return 0;
+    trophy_note(id);
+    return ps4rt_trophy_unlock(ctx,handle,id,platinum);
+}
+/* 0 when trophy id is now unlocked (or already was), -1 before the game registered its trophies. */
+int runtime_crowbar_unlock(int id) {
+    int32_t ctx=__atomic_load_n(&crowbar_ctx,__ATOMIC_ACQUIRE), handle=__atomic_load_n(&crowbar_handle,__ATOMIC_ACQUIRE);
+    if (ctx<0 || handle<0 || id<0 || id>127) return -1;
+    int32_t platinum=-1;
+    int32_t r=trophy_unlock(ctx,handle,id,&platinum);
+    printf("Crowbar: trophy %d unlocked on request (0x%x)\n",id,(unsigned)r);
+    return (r==0 || (uint32_t)r==0x8055160cu) ? 0 : -1; /* 0x8055160c: already unlocked */
 }
 static ABI int32_t trophy_game_info(int32_t ctx,int32_t handle,void *details,void *data) {
-    (void)ctx; (void)handle;
-    if (details) { uint64_t size; memcpy(&size,details,8); memset((char *)details+8,0,size>8 && size<4096 ? size-8 : 0); }
-    if (data) { uint64_t size; memcpy(&size,data,8); memset((char *)data+8,0,size>8 && size<4096 ? size-8 : 0); }
-    return 0;
+    return ps4rt_trophy_game_info(ctx,handle,details,data);
 }
 static ABI int32_t trophy_info(int32_t ctx,int32_t handle,int32_t id,void *details,void *data) {
-    (void)id; return trophy_game_info(ctx,handle,details,data);
+    return ps4rt_trophy_info(ctx,handle,id,details,data);
 }
-/* Nothing is unlocked on this console: an empty 128-trophy flag set. */
 static ABI int32_t trophy_unlock_state(int32_t ctx,int32_t handle,uint32_t *flags,uint32_t *count) {
-    if (!flags || !count) return TROPHY_INVALID;
-    if (ctx<=0 || handle<=0) return TROPHY_INVALID;
-    memset(flags,0,16); *count=0;
-    return 0;
+    return ps4rt_trophy_unlock_state(ctx,handle,flags,count);
 }
-static ABI int32_t trophy_release(int32_t id) { return id>0 ? 0 : TROPHY_INVALID; }
+static ABI int32_t trophy_abort(int32_t handle) { return ps4rt_trophy_abort(handle); }
+static ABI int32_t trophy_destroy_handle(int32_t handle) { return ps4rt_trophy_destroy_handle(handle); }
+static ABI int32_t trophy_destroy_context(int32_t ctx) { return ps4rt_trophy_destroy_context(ctx); }
 
 /* ---- PlayGo: fully installed package ---- */
 static int playgo_handle, playgo_chunks=-1;
@@ -880,8 +907,8 @@ static const RuntimeExport exports[]={
     {"sceNpTrophyCreateContext",trophy_context}, {"sceNpTrophyCreateHandle",trophy_handle},
     {"sceNpTrophyRegisterContext",trophy_register}, {"sceNpTrophyUnlockTrophy",trophy_unlock},
     {"sceNpTrophyGetGameInfo",trophy_game_info}, {"sceNpTrophyGetTrophyInfo",trophy_info},
-    {"sceNpTrophyGetTrophyUnlockState",trophy_unlock_state}, {"sceNpTrophyAbortHandle",trophy_release},
-    {"sceNpTrophyDestroyHandle",trophy_release}, {"sceNpTrophyDestroyContext",trophy_release},
+    {"sceNpTrophyGetTrophyUnlockState",trophy_unlock_state}, {"sceNpTrophyAbortHandle",trophy_abort},
+    {"sceNpTrophyDestroyHandle",trophy_destroy_handle}, {"sceNpTrophyDestroyContext",trophy_destroy_context},
     {"scePlayGoInitialize",playgo_init}, {"scePlayGoOpen",playgo_open}, {"scePlayGoGetChunkId",playgo_chunk_ids},
     {"scePlayGoGetLocus",playgo_locus}, {"scePlayGoSetInstallSpeed",playgo_speed},
     {"scePlayGoGetInstallSpeed",playgo_get_speed}, {"scePlayGoGetProgress",playgo_progress},

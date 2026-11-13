@@ -3,11 +3,13 @@
 #include "ps4rt_graphics.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace Ps4RtSettings {
 
@@ -51,7 +53,7 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         return;
     }
     if (key == "menu_tab") {
-        v.menu_tab = i >= 0 && i <= 3 ? i : 0;
+        v.menu_tab = i >= 0 && i <= 4 ? i : 0; // 4: Achievements
         return;
     }
     if (key == "upscaler") {
@@ -129,7 +131,8 @@ void Set(Values& v, const std::string& key, const std::string& value) {
     } else if (key == "live_resolution") {
         v.live_resolution = value == "auto" ? -1 : std::clamp(i, 0, 1);
     } else if (key == "output_res") {
-        for (int r = 0; r < OutputCount; ++r) {
+        if (value == "native") v.output_res = OutputNative;
+        for (int r = 1; r < OutputCount; ++r) {
             if (value == std::to_string(OutputWidths[r]) + "x" + std::to_string(OutputHeights[r])) {
                 v.output_res = r;
             }
@@ -138,6 +141,8 @@ void Set(Values& v, const std::string& key, const std::string& value) {
 }
 
 } // namespace
+
+static_assert(Ps4RtGraphics::Borderless == 1, "Values::display_mode defaults to borderless");
 
 Values& Get() {
     static Values values;
@@ -198,7 +203,14 @@ void Load() {
         // This title keeps native guest targets. Never import another game's
         // resolution, camera layout, object-motion signatures or jitter policy.
         if (const char* output = std::getenv("PS4RT_OUTPUT_RES")) Set(v, "output_res", output);
-        v.output_res = std::clamp(v.output_res.load(), 1, OutputCount - 1);
+        // Older ini files: 1920x1080 (the old default) and other choices that do not fit the
+        // selected internal resolution become Native; fitting ones are kept.
+        {
+            const int r = std::clamp(v.render_resolution.load(), 0, int(Ps4RtGraphics::Resolutions.size()) - 1);
+            v.output_res = std::clamp(v.output_res.load(), 0, OutputCount - 1);
+            if (!OutputAllowed(Ps4RtGraphics::ResolutionWidths[r], Ps4RtGraphics::ResolutionHeights[r], v.output_res))
+                v.output_res = OutputNative;
+        }
         v.preset = NativeAA;
         SetSceneUpscaler(v.upscaler, false);
         v.temporal_problem = "FSR is waiting for a 3D scene; original rendering is active.";
@@ -216,6 +228,14 @@ void Load() {
     v.startup_deferred_readback = v.deferred_readback;
     v.startup_stale_readback = v.stale_readback;
     v.startup_anisotropy = v.anisotropy;
+    // The console language this launch really uses (after ps4rt_launch.py applied any pending
+    // choice). The ini's language= key is only a pending change for the launcher, never read here.
+    const char* choices = std::getenv("PS4RT_LANGUAGE_CHOICES");
+    const char* language = std::getenv("PS4RT_LANGUAGE");
+    char* end = nullptr;
+    const long id = language && *language ? std::strtol(language, &end, 10) : -1;
+    v.language = choices && *choices && end && !*end && id >= 0 && id <= 30 ? int(id) : -1;
+    v.startup_language = v.language;
 }
 
 bool GraphicsNeedRestart() {
@@ -229,11 +249,13 @@ bool GraphicsNeedRestart() {
 
 void SetSceneUpscaler(int selected, bool object_motion) {
     auto& v = Get();
-    if (selected != UpscalerOff && selected != UpscalerFsr3 &&
-        selected != UpscalerFsr4 && selected != UpscalerFsr411) selected = UpscalerOff;
+    if (selected != UpscalerOff && selected != UpscalerFsr3 && selected != UpscalerFsr4 &&
+        selected != UpscalerFsr411 && selected != UpscalerFsr1) selected = UpscalerOff;
     const bool temporal = selected != UpscalerOff;
-    v.jitter = temporal && v.fsr_jitter;
-    v.object_motion = temporal && object_motion;
+    // FSR 1 is spatial: no camera jitter and no motion vectors.
+    const bool spatial = selected == UpscalerFsr1;
+    v.jitter = temporal && !spatial && v.fsr_jitter;
+    v.object_motion = temporal && !spatial && object_motion;
     v.reactive = false;
     v.spatial_aa = false;
     v.fsr1 = false;
@@ -243,8 +265,9 @@ void SetSceneUpscaler(int selected, bool object_motion) {
     v.upscaler = selected;
     if (temporal) {
         std::printf("PS4RT: %s, %s; native scene + output-size host UI\n",
-                    UpscalerName(selected), object_motion ? "camera + vertex-history motion"
-                                                         : "camera motion only");
+                    UpscalerName(selected), spatial         ? "spatial, no motion"
+                                            : object_motion ? "camera + vertex-history motion"
+                                                            : "camera motion only");
     }
 }
 
@@ -313,7 +336,8 @@ void Save() {
                  v.reactive_scale.load(), v.reactive_threshold.load(), v.reactive_max.load(),
                  v.debug_view.load(), int(v.show_fps.load()),
                  int(v.fsr4_auto_exposure.load()), int(v.fsr4_invert_jitter.load()));
-    std::fprintf(file, "output_res=%dx%d\n", OutputWidths[v.output_res], OutputHeights[v.output_res]);
+    if (v.output_res == OutputNative) std::fprintf(file, "output_res=native\n");
+    else std::fprintf(file, "output_res=%dx%d\n", OutputWidths[v.output_res], OutputHeights[v.output_res]);
     std::fprintf(file,
                  "overlay_fps=%d\noverlay_frametime=%d\noverlay_upscaler=%d\noverlay_gpu=%d\n"
                  "overlay_cpu=%d\noverlay_ram=%d\noverlay_vram=%d\noverlay_scale=%d\noverlay_corner=%d\n"
@@ -330,7 +354,7 @@ void Save() {
                  Ps4RtGraphics::DisplayModeKeys[std::clamp(v.display_mode.load(), 0, 2)].data(),
                  int(v.vsync.load()), v.fps_limit.load(), int(v.async_shaders.load()),
                  int(v.fsr1.load()), int(v.rcas.load()), v.rcas_strength.load(), v.frames_queued.load(),
-                 Ps4RtGraphics::Resolutions[std::clamp(v.render_resolution.load(), 0, 5)].data(),
+                 Ps4RtGraphics::Resolutions[std::clamp(v.render_resolution.load(), 0, int(Ps4RtGraphics::Resolutions.size()) - 1)].data(),
                  v.engine_fps.load(), int(v.deferred_readback.load()), int(v.stale_readback.load()),
                  int(v.restart_unconfirmed.load()));
     std::fprintf(file, "anisotropy=%d\nvibration=%d\n", v.anisotropy.load(), v.vibration.load());
@@ -339,6 +363,9 @@ void Save() {
     std::fprintf(file, "framerate=%d\n", v.framerate.load());
     std::fprintf(file, "graphics_preset=%d\n", v.graphics_preset.load());
     std::fprintf(file, "fsr_jitter=%d\n", int(v.fsr_jitter.load()));
+    // Pending game language for ps4rt_launch.py (a PS4 system language ID); -1 keeps the
+    // console language the game already uses.
+    std::fprintf(file, "language=%d\n", v.language != v.startup_language ? v.language.load() : -1);
     // Read by run.sh at start.
     std::fprintf(file, "live_resolution=%s\n", v.live_resolution < 0 ? "auto"
                                                   : v.live_resolution ? "1" : "0");
@@ -350,6 +377,65 @@ float PresetScale(int preset) {
     return scales[std::clamp(preset, 0, PresetCount - 1)];
 }
 
+bool OutputAllowed(int iw, int ih, int output) {
+    if (output == OutputNative) return true;
+    if (output < 0 || output >= OutputCount || iw <= 0 || ih <= 0) return false;
+    const int ow = OutputWidths[output], oh = OutputHeights[output];
+    const double in = double(iw) / ih, out = double(ow) / oh;
+    // At most 3x per axis, FSR's supported range (Ultra Performance): 1024x576 to 4K (3.75x)
+    // looked worse than to 1080p; 1280x720 to 4K is exactly 3x.
+    return ow > iw && oh > ih && ow <= 3 * iw && oh <= 3 * ih && std::abs(out - in) <= 0.01 * in;
+}
+
+namespace {
+
+// "WxH" in a sane range, else false.
+bool ParseSize(const char* text, int& width, int& height) {
+    unsigned w = 0, h = 0;
+    if (!text || std::sscanf(text, "%ux%u", &w, &h) != 2 || w < 640 || w > 8192 || h < 360 || h > 8192)
+        return false;
+    width = int(w);
+    height = int(h);
+    return true;
+}
+
+} // namespace
+
+void SceneSize(int& width, int& height) {
+    // The environment is fixed for a run; the presenter asks every frame.
+    static const std::pair<int, int> size = [] {
+        int w = 1920, h = 1080;
+        ParseSize(std::getenv("PS4RT_INTERNAL_RES"), w, h);
+        return std::pair<int, int>{w, h};
+    }();
+    width = size.first;
+    height = size.second;
+}
+
+void GameDisplaySize(int& width, int& height) {
+    static const std::pair<int, int> size = [] {
+        int w = 1920, h = 1080;
+        // The Internal resolution: src/loader.c gives the engine the same --res as --renderres.
+        ParseSize(std::getenv("PS4RT_INTERNAL_RES"), w, h);
+        return std::pair<int, int>{w, h};
+    }();
+    width = size.first;
+    height = size.second;
+}
+
+void FsrOutputSize(int& width, int& height) {
+    int w, h;
+    SceneSize(w, h);
+    width = w;
+    height = h;
+    const int output = Get().output_res;
+    if (output == OutputNative || !OutputAllowed(w, h, output)) return;
+    // Fit inside the chosen size at the scene's aspect: 2560x1080 -> 3414x1440 (thin bars).
+    const double s = std::min(double(OutputWidths[output]) / w, double(OutputHeights[output]) / h);
+    width = std::min(OutputWidths[output], (int(w * s + 0.5) + 1) & ~1);
+    height = std::min(OutputHeights[output], (int(h * s + 0.5) + 1) & ~1);
+}
+
 const char* PresetName(int preset) {
     static constexpr const char* names[PresetCount] = {"Native AA", "Quality", "Balanced",
                                                        "Performance", "Ultra Performance"};
@@ -357,7 +443,8 @@ const char* PresetName(int preset) {
 }
 
 const char* UpscalerName(int upscaler) {
-    static constexpr const char* names[UpscalerCount] = {"off", "fsr3", "fsr4", "fsr411", "taa", "dlss"};
+    static constexpr const char* names[UpscalerCount] = {"off", "fsr3", "fsr4", "fsr411", "taa", "dlss",
+                                                         "fsr1"};
     return names[std::clamp(upscaler, 0, UpscalerCount - 1)];
 }
 

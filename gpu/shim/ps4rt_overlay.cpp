@@ -19,6 +19,7 @@
 extern char **environ;
 #endif
 #include <unordered_map>
+#include <string>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -27,6 +28,9 @@ extern char **environ;
 #include "ps4rt_menu_sounds.h"
 #include "ps4rt_graphics.h"
 #include "ps4rt_perf_stats.h"
+#include "ps4rt_achievements_ui.h"
+#include "ps4rt_menu_navigation.h"
+#include "ps4rt_screenshot.h"
 
 extern "C" void runtime_restart(void); // src/loader.c: starts this launch again, ends this process
 #include "common/elf_info.h"
@@ -105,6 +109,10 @@ bool cancel_was_editing = false;
 // Circle/B can cancel a widget and close the menu in the same frame.
 // Suppress the second close cue only when a cancel cue already played.
 bool cancel_sound_just_played = false;
+// Captured before NewFrame: Circle in the achievement list first returns to its page.
+bool cancel_was_in_child_panel = false;
+// Achievements share the menu with the settings pages; menu_tab keeps the last one.
+constexpr int AchievementsTab = 4;
 // The installer runs out-of-process. Existing add-on mounts are immutable until restart.
 std::atomic<int> dlc_installer_state{0}; // 0 idle, 1 running, 2 unchanged, 3 added, -1 failed
 
@@ -308,6 +316,32 @@ void Choice(const char* label, std::atomic<int>& target, const char* const* labe
     }
 }
 
+// Internal resolution: one list grouped under aspect headings (16:9, 21:9, 24:9, 32:9), as in
+// the Code Fairy port.
+void ResolutionChoice(const char* label, std::atomic<int>& target) {
+    namespace G = Ps4RtGraphics;
+    const int value = target.load();
+    const int current = G::IndexOf(G::ResolutionMenuOrder, value, 2);
+    if (!ImGui::BeginCombo(label, G::ResolutionMenuLabels[current], ImGuiComboFlags_HeightLarge))
+        return;
+    for (const auto& group : G::ResolutionMenuGroups) {
+        // Headings are decorative: keyboard and controller navigation visits only resolutions.
+        ImGui::SeparatorText(group.label);
+        for (int i = group.first; i < group.first + group.count; ++i) {
+            const bool selected = G::ResolutionMenuOrder[i] == value;
+            if (ImGui::Selectable(G::ResolutionMenuLabels[i], selected))
+                Store(target, G::ResolutionMenuOrder[i], true);
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+    }
+    ImGui::EndCombo();
+}
+
+static const char* const kInternalResolutionHelp =
+    "The resolution the game renders at. Restart required. Ultrawide resolutions are experimental: "
+    "occasional flicker or misplaced UI elements may occur; switch back to 16:9 if a scene misbehaves. "
+    "Videos and 2D screens stay 16:9.";
+
 // Controller button names in the help text follow PS4RT_GLYPHS (run.py sets xbox or nintendo when
 // the glyph feature is on); unset is PlayStation. Read once: the environment is fixed for a run.
 static const char* PadText(const char* playstation, const char* xbox, const char* nintendo) {
@@ -383,6 +417,7 @@ const char* UpscalerLabel(int upscaler) {
     case Ps4RtSettings::UpscalerFsr411: return "FSR 4.1.1";
     case Ps4RtSettings::UpscalerTaa: return "TAA";
     case Ps4RtSettings::UpscalerDlss: return "DLSS";
+    case Ps4RtSettings::UpscalerFsr1: return "FSR 1";
     default: return "";
     }
 }
@@ -404,8 +439,60 @@ std::string OverlayText() {
     return P::Format(sample, items, s.overlay_layout == 0);
 }
 
+// The console languages ps4rt_launch.py offers (PS4RT_LANGUAGE_CHOICES: "id=label|...", PS4
+// system language IDs, in menu order). Empty without the launcher. Read once: the environment is
+// fixed for a run. Adapted from the Code Fairy port's language list.
+struct LanguageChoices {
+    std::vector<std::string> names;
+    std::vector<const char*> labels;
+    std::vector<int> ids;
+};
+const LanguageChoices& GameLanguages() {
+    static const LanguageChoices choices = [] {
+        LanguageChoices c;
+        const char* list = std::getenv("PS4RT_LANGUAGE_CHOICES");
+        for (const char* p = list ? list : ""; *p;) {
+            const char* end = std::strchr(p, '|');
+            const std::string entry(p, end ? size_t(end - p) : std::strlen(p));
+            const auto eq = entry.find('=');
+            char* tail = nullptr;
+            const long id = eq == std::string::npos ? -1 : std::strtol(entry.c_str(), &tail, 10);
+            if (eq != std::string::npos && eq > 0 && tail == entry.c_str() + eq && id >= 0 && id <= 30 &&
+                eq + 1 < entry.size()) {
+                c.ids.push_back(int(id));
+                c.names.push_back(entry.substr(eq + 1));
+            }
+            if (!end) break;
+            p = end + 1;
+        }
+        for (const auto& name : c.names) c.labels.push_back(name.c_str());
+        return c;
+    }();
+    return choices;
+}
+
+// Game language: the console language Sakura Wars reads when it starts. Shown only when the
+// launcher offers choices that include the language this launch uses.
+void LanguageRow() {
+    auto& s = Ps4RtSettings::Get();
+    const auto& c = GameLanguages();
+    if (s.startup_language < 0 ||
+        std::find(c.ids.begin(), c.ids.end(), s.startup_language) == c.ids.end())
+        return;
+    ChoiceRow("Game language", s.language, c.labels.data(), c.ids.data(), int(c.ids.size()),
+              "The console language the game starts with: its menus, text and subtitles. "
+              "Applies after restarting the game.");
+}
+
 void GameTab() {
     auto& s = Ps4RtSettings::Get();
+    if (s.startup_language >= 0 && !GameLanguages().ids.empty()) {
+        ImGui::SeparatorText("Language");
+        if (BeginRows("##language")) {
+            LanguageRow();
+            ImGui::EndTable();
+        }
+    }
     ImGui::SeparatorText("Controller");
     if (BeginRows("##controller")) {
         SliderRow("Vibration", s.vibration, 0, 100, "%d%%",
@@ -453,34 +540,69 @@ void GraphicsPresetRow() {
 void CompactGraphics() {
     auto& s = Ps4RtSettings::Get();
     if (BeginRows("##scene_image")) {
-        static const char* const outputs[] = {"1920 x 1080", "2560 x 1440", "3840 x 2160 (4K)"};
-        static constexpr int output_values[] = {1, 2, 3};
-        Row("Output resolution");
+        namespace G = Ps4RtGraphics;
+        Row("Internal resolution");
         if (focus_graphics) {
             ImGui::SetKeyboardFocusHere();
             focus_graphics = false;
         }
-        Choice("##value",s.output_res,outputs,output_values,3);
-        Help("Fixed 16:9 output fitted to the window. The game still renders internally at 1080p.");
+        ResolutionChoice("##value", s.render_resolution);
+        Help(kInternalResolutionHelp);
         ImGui::PopID();
+        {
+            // The internal resolution this launch renders at (a new choice applies on restart).
+            int sw, sh;
+            Ps4RtSettings::SceneSize(sw, sh);
+            char text[32];
+            std::snprintf(text, sizeof(text), "%d x %d", sw, sh);
+            InfoRow("Current Applied Resolution:", text);
+        }
+        {
+            // Outputs for the selected internal resolution (same aspect family, larger); Native first.
+            const int r = std::clamp(s.render_resolution.load(), 0, int(G::Resolutions.size()) - 1);
+            const int iw = G::ResolutionWidths[r], ih = G::ResolutionHeights[r];
+            if (!Ps4RtSettings::OutputAllowed(iw, ih, s.output_res)) Store(s.output_res, Ps4RtSettings::OutputNative, true);
+            static const char* const output_labels[] = {"Native (AA only)", "1920 x 1080", "2560 x 1440",
+                "3840 x 2160 (4K)", "3440 x 1440", "3840 x 1440", "5120 x 1440"};
+            const char* labels[Ps4RtSettings::OutputCount];
+            int values[Ps4RtSettings::OutputCount];
+            int count = 0;
+            for (int o = 0; o < Ps4RtSettings::OutputCount; ++o) {
+                if (!Ps4RtSettings::OutputAllowed(iw, ih, o)) continue;
+                labels[count] = output_labels[o];
+                values[count++] = o;
+            }
+            ChoiceRow("FSR Upscale output", s.output_res, labels, values, count,
+                      "This setting has no effect unless FSR is enabled. Only resolutions larger than "
+                      "the Internal resolution, at its aspect and up to 3x (FSR's range), are offered; "
+                      "Native enables FSR anti-aliasing without upscaling. Applies live.");
+        }
         ChoiceRow("Display mode", s.display_mode, Ps4RtGraphics::DisplayModeNames.data(),
                   nullptr, Ps4RtGraphics::DisplayModeCount,
                   "Windowed, borderless window or fullscreen. Applies immediately.");
-        static const char* const providers[] = {"Off / Original", "FSR 3.1", "FSR 4 v07"};
+        CheckRow("FPS counter", s.show_fps, "Shows the frame rate in a corner of the screen. Applies live.");
+        static const char* const providers[] = {"Off / Original", "FSR 1", "FSR 3.1", "FSR 4 v07"};
         static constexpr int provider_values[] = {Ps4RtSettings::UpscalerOff,
-            Ps4RtSettings::UpscalerFsr3, Ps4RtSettings::UpscalerFsr4};
+            Ps4RtSettings::UpscalerFsr1, Ps4RtSettings::UpscalerFsr3, Ps4RtSettings::UpscalerFsr4};
         // Commit the provider together with its required motion/jitter settings.
         std::atomic<int> provider{s.upscaler.load()};
+        // The footnote also carries any reason FSR cannot run right now.
+        static std::string upscaler_help;
+        upscaler_help = "FSR reconstructs the scene before the HUD. FSR 1 is the light one for "
+                        "weak GPUs: it upscales each frame on its own (no anti-aliasing, best with "
+                        "the game's own on). FSR 3.1 and 4 rebuild the image over several frames "
+                        "(smoother edges, heavier). Off uses the original image with ordinary "
+                        "display scaling. Applies live.";
+        if (s.upscaler != Ps4RtSettings::UpscalerOff)
+            if (const char* problem = s.temporal_problem.load()) upscaler_help += std::string(" ") + problem;
+        if (!s.fsr4_supported)
+            upscaler_help += " FSR 4 v07 requires GPU features unavailable on this device. FSR 3.1 remains available.";
+        if (const char* problem = s.fsr4_problem.load()) upscaler_help += std::string(" ") + problem;
         ChoiceRow("Upscaling / anti-aliasing", provider, providers, provider_values,
-                  s.fsr4_supported ? 3 : 2,
-                  "FSR reconstructs the 1080p scene before the HUD. Off uses the original image with ordinary display scaling.");
+                  s.fsr4_supported ? 4 : 3, upscaler_help.c_str());
         if (provider != s.upscaler)
             Ps4RtSettings::SetSceneUpscaler(provider, false);
         const bool temporal = s.upscaler != Ps4RtSettings::UpscalerOff;
-        const int output = s.output_res;
-        InfoRow("Quality preset", !temporal || s.temporal_problem ? "Original (1080p input)" :
-            output == 1 ? "Native AA (1080p input)" :
-            output == 3 ? "Performance (1080p input)" : "Custom 1.33x (1080p input)");
         static const char* const anisotropy_labels[] = {"Game default", "2x", "4x", "8x", "16x"};
         ChoiceRow("Anisotropic filtering", s.anisotropy, anisotropy_labels,
                   Ps4RtGraphics::Anisotropies.data(), int(Ps4RtGraphics::Anisotropies.size()),
@@ -500,22 +622,13 @@ void CompactGraphics() {
             s.rcas_strength = strength;
             dirty = true;
         }
-        Help("Optional sharpening. 0% disables it; larger values can add halos around edges.");
+        Help("Optional sharpening. 0% disables it; larger values can add halos around edges. Applies live.");
         ImGui::PopID();
+        LanguageRow();
         ImGui::EndTable();
     }
-    {
-        ImGui::TextDisabled("Display mode, resolution, FSR and sharpening apply live. Choices save on close.");
-        if (s.anisotropy != s.startup_anisotropy)
-            ImGui::TextWrapped("Restart the game to apply the selected anisotropic filtering.");
-        else
-            ImGui::TextDisabled("Anisotropic filtering changes require a game restart.");
-        ImGui::TextDisabled("Render scale follows the fixed 1080p game input.");
-        if (s.upscaler != Ps4RtSettings::UpscalerOff)
-            if (const char* problem = s.temporal_problem.load()) ImGui::TextWrapped("%s", problem);
-        if (!s.fsr4_supported) ImGui::TextWrapped("FSR 4 v07 requires GPU features unavailable on this device. FSR 3.1 remains available.");
-        if (const char* problem = s.fsr4_problem.load()) ImGui::TextWrapped("%s", problem);
-    }
+    // Each row's notes (live or on restart, render scale, FSR problems) are in its footnote;
+    // a pending restart change turns the Restart Game button into "Apply and restart".
 }
 
 void ImageTab() {
@@ -552,7 +665,7 @@ void ImageTab() {
                   "Sharper floors and walls seen at an angle. Little cost on most GPUs.");
         ImGui::EndTable();
     }
-    ImGui::TextDisabled("F12 saves a screenshot to the user\\screenshots folder.");
+    ImGui::TextDisabled("F12 saves a screenshot of the game image to the user/gpu/screenshots folder.");
     ImGui::SeparatorText("Information");
     if (BeginRows("##image_info")) {
         char text[96];
@@ -593,9 +706,10 @@ void PerformanceTab() {
     }
     ImGui::SeparatorText("Applied on restart");
     if (BeginRows("##restart")) {
-        static const char* const resolution_labels[] = {"Native (1080p)", "480p", "720p", "1440p", "1800p", "4K"};
-        ChoiceRow("Render resolution", s.render_resolution, resolution_labels, nullptr, int(G::Resolutions.size()),
-                  "The resolution the game draws at. Higher is sharper and slower.");
+        Row("Internal resolution");
+        ResolutionChoice("##value", s.render_resolution);
+        Help(kInternalResolutionHelp);
+        ImGui::PopID();
         static const char* const engine_labels[] = {"60 (original)", "120", "240"};
         ChoiceRow("Engine frame rate", s.engine_fps, engine_labels, G::EngineFps.data(), int(G::EngineFps.size()),
                   "The highest frame rate the game itself runs at.");
@@ -672,7 +786,7 @@ int RestartChanges() {
     const auto& s = Ps4RtSettings::Get();
     return (s.render_resolution != s.startup_render_resolution) + (s.engine_fps != s.startup_engine_fps) +
            (s.deferred_readback != s.startup_deferred_readback) + (s.stale_readback != s.startup_stale_readback) +
-           (s.anisotropy != s.startup_anisotropy);
+           (s.anisotropy != s.startup_anisotropy) + (s.language != s.startup_language);
 }
 
 // The portrait stays within the menu window, behind all settings widgets.
@@ -737,77 +851,115 @@ void Menu() {
     DrawMenuArtInWindow();
     footer_help = nullptr;
     if (s.CompactGraphicsMenu()) {
-        CompactGraphics();
+        // Graphics and Achievements share the compact panel (adapted from the Code Fairy
+        // port). L1 / R1 or Q / E swap pages; the Graphics page keeps its original rows,
+        // controls and one-press Circle close. Only the achievement page uses child panels.
+        const bool swap_page = ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false) ||
+                               ImGui::IsKeyPressed(ImGuiKey_E, false) ||
+                               ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false) ||
+                               ImGui::IsKeyPressed(ImGuiKey_Q, false);
+        if (!ImGui::GetIO().WantTextInput && swap_page)
+            requested_tab = s.menu_tab == AchievementsTab ? 0 : AchievementsTab;
+        if (requested_tab >= 0 && requested_tab != AchievementsTab) requested_tab = 0;
+        if (ImGui::BeginTabBar("##compact_tabs")) {
+            for (int tab : {0, AchievementsTab}) {
+                const auto flags = requested_tab == tab ? ImGuiTabItemFlags_SetSelected : 0;
+                if (!ImGui::BeginTabItem(tab == AchievementsTab ? "Achievements" : "Graphics", nullptr, flags))
+                    continue;
+                if (s.menu_tab != tab) { s.menu_tab = tab; dirty = true; }
+                if (tab == AchievementsTab) {
+                    const float footer = ImGui::GetTextLineHeightWithSpacing() * 3.0f;
+                    if (ImGui::BeginChild("##compact_body", ImVec2(0, -footer)))
+                        Ps4RtAchievementsUi::List(base_scale);
+                    ImGui::EndChild();
+                } else {
+                    CompactGraphics();
+                }
+                ImGui::EndTabItem();
+            }
+            requested_tab = -1;
+            ImGui::EndTabBar();
+        }
+        const bool achievements_page = s.menu_tab == AchievementsTab;
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextDisabled("%s", footer_help ? footer_help :
-            PadText("D-pad: navigate. Cross: select. Circle: back.",
-                    "D-pad: navigate. A: select. B: back.",
-                    "D-pad: navigate. B: select. A: back."));
+        ImGui::TextDisabled("%s", footer_help ? footer_help : achievements_page ?
+            PadText("D-pad: navigate. Cross: enter the list. Circle: back. L1 / R1 or Q / E: Graphics.",
+                    "D-pad: navigate. A: enter the list. B: back. LB / RB or Q / E: Graphics.",
+                    "D-pad: navigate. B: enter the list. A: back. L / R or Q / E: Graphics.") :
+            PadText("D-pad: navigate. Cross: select. Circle: back. L1 / R1 or Q / E: Achievements. Choices save on close.",
+                    "D-pad: navigate. A: select. B: back. LB / RB or Q / E: Achievements. Choices save on close.",
+                    "D-pad: navigate. B: select. A: back. L / R or Q / E: Achievements. Choices save on close."));
         ImGui::PopTextWrapPos();
-        if (ImGui::Button("Close")) keep_open = false;
-        ImGui::SameLine();
-        if (ImGui::Button("Exit Game"))
-            ImGui::OpenPopup("Exit game?");
-        ImGui::SameLine();
-        if (ImGui::Button("Restart Game"))
-            ImGui::OpenPopup("Restart game?");
-        ImGui::SameLine();
-        ImGui::BeginDisabled(dlc_installer_state == 1);
-        if (ImGui::Button("Install DLC..."))
-            OpenDlcInstaller();
-        ImGui::EndDisabled();
-        ShowDlcInstallerStatus();
-        // Starts the game again from boot (same launch), for scenes that are hard to leave.
-        if (ImGui::BeginPopupModal("Restart game?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::TextWrapped("Restart the game from the start? Unsaved game progress will be lost.");
-            ImGui::Spacing();
-            if (ImGui::Button("Cancel") ||
-                ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
-                ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)) {
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SetItemDefaultFocus();
+        if (!achievements_page) {
+            if (ImGui::Button("Close")) keep_open = false;
             ImGui::SameLine();
-            if (ImGui::Button("Restart")) {
-                // Graphics settings only; this is not an in-game save.
-                Ps4RtSettings::Save();
-                dirty = false;
-                runtime_restart();
-            }
-            ImGui::EndPopup();
-        }
-        // Confirm explicitly: closing the host process does not save in-game progress.
-        if (ImGui::BeginPopupModal("Exit game?", nullptr,
-                                  ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::TextWrapped("Exit to desktop? Unsaved game progress will be lost.");
-            ImGui::Spacing();
-            if (ImGui::Button("Cancel") ||
-                ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
-                ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)) {
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SetItemDefaultFocus();
+            if (ImGui::Button("Exit Game"))
+                ImGui::OpenPopup("Exit game?");
             ImGui::SameLine();
-            if (ImGui::Button("Exit to desktop")) {
-                // Use the existing window-close path, not an abrupt renderer-thread exit.
-                // Save runtime graphics settings first; this is not an in-game save.
-                Ps4RtSettings::Save();
-                dirty = false;
-                SDL_Event quit{};
-                quit.type = SDL_EVENT_QUIT;
-                if (SDL_PushEvent(&quit)) {
+            const int restart_changes = RestartChanges();
+            if (ImGui::Button(restart_changes ? "Apply and restart###restart_game" : "Restart Game###restart_game"))
+                ImGui::OpenPopup("Restart game?");
+            ImGui::SameLine();
+            ImGui::BeginDisabled(dlc_installer_state == 1);
+            if (ImGui::Button("Install DLC..."))
+                OpenDlcInstaller();
+            ImGui::EndDisabled();
+            ShowDlcInstallerStatus();
+            // Starts the game again from boot (same launch), for scenes that are hard to leave.
+            if (ImGui::BeginPopupModal("Restart game?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::TextWrapped(restart_changes
+                    ? "Restart the game from the start to apply the new settings? Unsaved game progress will be lost."
+                    : "Restart the game from the start? Unsaved game progress will be lost.");
+                ImGui::Spacing();
+                if (ImGui::Button("Cancel") ||
+                    ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
+                    ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)) {
                     ImGui::CloseCurrentPopup();
-                } else {
-                    std::fprintf(stderr, "PS4RT: could not queue exit event: %s\n", SDL_GetError());
                 }
+                ImGui::SetItemDefaultFocus();
+                ImGui::SameLine();
+                if (ImGui::Button("Restart")) {
+                    // Graphics settings only; this is not an in-game save.
+                    Ps4RtSettings::Save();
+                    dirty = false;
+                    runtime_restart();
+                }
+                ImGui::EndPopup();
             }
-            ImGui::EndPopup();
-        }
-        // Circle first cancels a popup or slider; another press closes the panel.
+            // Confirm explicitly: closing the host process does not save in-game progress.
+            if (ImGui::BeginPopupModal("Exit game?", nullptr,
+                                      ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::TextWrapped("Exit to desktop? Unsaved game progress will be lost.");
+                ImGui::Spacing();
+                if (ImGui::Button("Cancel") ||
+                    ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
+                    ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)) {
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SetItemDefaultFocus();
+                ImGui::SameLine();
+                if (ImGui::Button("Exit to desktop")) {
+                    // Use the existing window-close path, not an abrupt renderer-thread exit.
+                    // Save runtime graphics settings first; this is not an in-game save.
+                    Ps4RtSettings::Save();
+                    dirty = false;
+                    SDL_Event quit{};
+                    quit.type = SDL_EVENT_QUIT;
+                    if (SDL_PushEvent(&quit)) {
+                        ImGui::CloseCurrentPopup();
+                    } else {
+                        std::fprintf(stderr, "PS4RT: could not queue exit event: %s\n", SDL_GetError());
+                    }
+                }
+                ImGui::EndPopup();
+            }
+        } // The bottom actions belong to the Graphics page.
+        // Circle first cancels a popup or slider, or leaves the achievement list;
+        // another press closes the panel.
         if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) &&
-            !cancel_was_editing && !ImGui::IsPopupOpen("Exit game?") &&
+            !cancel_was_editing && !cancel_was_in_child_panel && !ImGui::IsPopupOpen("Exit game?") &&
             !ImGui::IsPopupOpen("Restart game?") &&
             !ImGui::IsPopupOpen("Restart for DLC?"))
             keep_open = false;
@@ -815,7 +967,7 @@ void Menu() {
         if (!keep_open) SetOpen(false);
         return;
     }
-    constexpr int TabCount = 4;
+    constexpr int TabCount = 5;
     const ImGuiIO& io = ImGui::GetIO();
     if (!io.WantTextInput) {
         const int step = ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false) || ImGui::IsKeyPressed(ImGuiKey_E, false) ? 1
@@ -828,7 +980,7 @@ void Menu() {
     }
     const float footer = ImGui::GetFrameHeightWithSpacing() * 2.0f + ImGui::GetTextLineHeightWithSpacing() * 2.0f;
     if (ImGui::BeginTabBar("##tabs")) {
-        static const char* const tabs[TabCount] = {"Game", "Image", "Performance", "Overlay"};
+        static const char* const tabs[TabCount] = {"Game", "Image", "Performance", "Overlay", "Achievements"};
         for (int tab = 0; tab < TabCount; ++tab) {
             const ImGuiTabItemFlags flags = requested_tab == tab ? ImGuiTabItemFlags_SetSelected : 0;
             if (!ImGui::BeginTabItem(tabs[tab], nullptr, flags)) {
@@ -843,7 +995,8 @@ void Menu() {
                 case 0: GameTab(); break;
                 case 1: ImageTab(); break;
                 case 2: PerformanceTab(); break;
-                default: OverlayTab(); break;
+                case 3: OverlayTab(); break;
+                default: Ps4RtAchievementsUi::List(base_scale); break;
                 }
             }
             ImGui::EndChild();
@@ -861,26 +1014,28 @@ void Menu() {
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextDisabled("%s", footer_help ? footer_help : PadText("L1 / R1 or Q / E: switch tabs. Settings are saved in ps4rt.ini.", "LB / RB or Q / E: switch tabs. Settings are saved in ps4rt.ini.", "L / R or Q / E: switch tabs. Settings are saved in ps4rt.ini."));
     ImGui::PopTextWrapPos();
-    if (const int changes = RestartChanges()) {
-        ImGui::TextColored(ImVec4(0.85f, 0.72f, 0.45f, 1.0f), "%d change%s need%s a restart (unsaved progress is lost).",
-                           changes, changes == 1 ? "" : "s", changes == 1 ? "s" : "");
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!std::getenv("PS4RT_RESTART_COMMAND"));
-        if (ImGui::Button("Apply and restart")) {
-            // The new launch confirms the options once the game shows; run.py restores the
-            // previous ones if it never does (restart_unconfirmed).
-            s.restart_unconfirmed = true;
-            Ps4RtSettings::Save();
-            runtime_restart();
+    if (s.menu_tab != AchievementsTab) { // the list uses the whole page
+        if (const int changes = RestartChanges()) {
+            ImGui::TextColored(ImVec4(0.85f, 0.72f, 0.45f, 1.0f), "%d change%s need%s a restart (unsaved progress is lost).",
+                               changes, changes == 1 ? "" : "s", changes == 1 ? "s" : "");
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!std::getenv("PS4RT_RESTART_COMMAND"));
+            if (ImGui::Button("Apply and restart")) {
+                // The new launch confirms the options once the game shows; run.py restores the
+                // previous ones if it never does (restart_unconfirmed).
+                s.restart_unconfirmed = true;
+                Ps4RtSettings::Save();
+                runtime_restart();
+            }
+            ImGui::EndDisabled();
+        } else {
+            ImGui::NewLine();
         }
-        ImGui::EndDisabled();
-    } else {
-        ImGui::NewLine();
-    }
-    const float close_width = ImGui::CalcTextSize("Close").x + ImGui::GetStyle().FramePadding.x * 2;
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - close_width);
-    if (ImGui::Button("Close")) {
-        keep_open = false;
+        const float close_width = ImGui::CalcTextSize("Close").x + ImGui::GetStyle().FramePadding.x * 2;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - close_width);
+        if (ImGui::Button("Close")) {
+            keep_open = false;
+        }
     }
     ImGui::End();
     if (!keep_open) {
@@ -1315,34 +1470,37 @@ void Init(const Vulkan::Instance& instance, vk::Format format, u32 image_count) 
     font_config.FontDataOwnedByAtlas = false;
     io.Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(ps4rt_font_ttf),
                                    int(ps4rt_font_ttf_end - ps4rt_font_ttf), 18.0f, &font_config);
+    // Trophy text can be Japanese, Korean or Chinese (PS4 system languages 0, 9-11). Reuse a
+    // locally installed open CJK font when available (as in the Code Fairy port); no game
+    // font is bundled. Without one, those glyphs fall back to the font's missing-glyph box.
+    if (const char* language = std::getenv("PS4RT_TROPHY_LANGUAGE"); language &&
+        (std::atoi(language) == 0 || (std::atoi(language) >= 9 && std::atoi(language) <= 11))) {
+        const char* fonts[] = {
+            std::getenv("PS4RT_CJK_FONT"),
+            "/usr/share/fonts/google-noto-sans-cjk-vf-fonts/NotoSansCJK-VF.ttc",
+            "/usr/share/fonts/google-noto-sans-cjk-fonts/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
 #ifdef _WIN32
-    // French, English, Spanish and German already fit the embedded font.
-    // Japanese, Korean and Chinese use a Windows font, and only for that card language.
-    if (const char* lang = std::getenv("PS4RT_TROPHY_LANG")) {
-        const char* path = nullptr;
-        const ImWchar* ranges = nullptr;
-        if (std::strcmp(lang, "ja") == 0) {
-            path = "C:\\Windows\\Fonts\\YuGothM.ttc";
-            ranges = io.Fonts->GetGlyphRangesJapanese();
-        } else if (std::strcmp(lang, "ko") == 0) {
-            path = "C:\\Windows\\Fonts\\malgun.ttf";
-            ranges = io.Fonts->GetGlyphRangesKorean();
-        } else if (std::strcmp(lang, "zh-Hant") == 0) {
-            path = "C:\\Windows\\Fonts\\msjh.ttc";
-            ranges = io.Fonts->GetGlyphRangesChineseFull();
-        }
-        if (path && ranges) {
-            if (std::FILE* probe = std::fopen(path, "rb")) {
-                std::fclose(probe);
-                ImFontConfig merge;
-                merge.MergeMode = true;
-                if (!io.Fonts->AddFontFromFileTTF(path, 18.0f, &merge, ranges)) {
-                    std::fprintf(stderr, "Overlay: trophy font unavailable\n");
-                }
+            // Windows: the system's own Japanese, Korean and Chinese fonts.
+            "C:\\Windows\\Fonts\\YuGothM.ttc",
+            "C:\\Windows\\Fonts\\malgun.ttf",
+            "C:\\Windows\\Fonts\\msjh.ttc",
+#endif
+        };
+        for (const char* path : fonts) {
+            if (!path || !*path) continue;
+            std::FILE* file = std::fopen(path, "rb");
+            if (!file) continue;
+            std::fclose(file);
+            ImFontConfig merge;
+            merge.MergeMode = true;
+            if (io.Fonts->AddFontFromFileTTF(path, 18.0f, &merge)) {
+                std::printf("Overlay: CJK trophy text font %s\n", path);
+                break;
             }
         }
     }
-#endif
 
     const vk::Instance vk_instance = instance.GetInstance();
     ImGui_ImplVulkan_LoadFunctions(
@@ -1361,8 +1519,9 @@ void Init(const Vulkan::Instance& instance, vk::Format format, u32 image_count) 
     info.Device = instance.GetDevice();
     info.QueueFamily = instance.GetGraphicsQueueFamilyIndex();
     info.Queue = instance.GetGraphicsQueue();
-    // Font atlas plus the save list pictures (up to 33, and a closed list's until freed).
-    info.DescriptorPoolSize = 128;
+    // Font atlas, achievement icons (46 in CUSA16429, kept for the overlay lifetime) and the
+    // save list pictures (up to 33, and a closed list's until freed).
+    info.DescriptorPoolSize = 512;
     info.MinImageCount = std::max(image_count, 2u);
     info.ImageCount = std::max(image_count, 2u);
     info.UseDynamicRendering = true;
@@ -1496,10 +1655,16 @@ bool HandleEvent(const SDL_Event& event) {
     case SDL_EVENT_KEY_DOWN:
     case SDL_EVENT_KEY_UP: {
         const bool down = event.type == SDL_EVENT_KEY_DOWN;
+        if (event.key.key == SDLK_F12) {
+            // The game's image without this menu, saved by the presenter.
+            if (down && !event.key.repeat) Ps4RtScreenshot::Request();
+            return true;
+        }
         if (is_open && event.key.key == SDLK_ESCAPE &&
             (ImGui::IsPopupOpen("Exit game?") || ImGui::IsPopupOpen("Restart game?") ||
-             ImGui::IsPopupOpen("Restart for DLC?"))) {
-            // Let Escape cancel the exit or restart confirmation instead of closing the panel.
+             ImGui::IsPopupOpen("Restart for DLC?") || Ps4RtMenuNavigation::ChildPanelFocused())) {
+            // Let Escape cancel the exit or restart confirmation, or leave the achievement
+            // list, instead of closing the panel.
             if (down && !event.key.repeat) menu_sounds.Play(Ps4RtMenuSounds::Cue::Cancel);
             io.AddKeyEvent(ImGuiKey_Escape, down);
             return true;
@@ -1678,7 +1843,7 @@ void SetLoading(bool active, u32 done, u32 total) {
 bool Visible() {
     const auto& s = Ps4RtSettings::Get();
     return initialized && (loading || background_total || menu_open || text_entry_active || choice_active ||
-                           choice_retiring || s.show_fps || NoticeActive() || TrophyPending());
+                           choice_retiring || s.show_fps || NoticeActive() || Ps4RtAchievementsUi::Pending());
 }
 
 bool CapturesInput() {
@@ -1736,8 +1901,11 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent) {
 
     PrepareTrophyCard();
     UpdateChoiceTextures();
+    // Achievement icons become textures here, before NewFrame, like the save pictures.
+    Ps4RtAchievementsUi::Prepare(menu_open && Ps4RtSettings::Get().menu_tab == AchievementsTab);
     ImGui_ImplVulkan_NewFrame();
     cancel_was_editing = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) || ImGui::GetActiveID();
+    cancel_was_in_child_panel = Ps4RtMenuNavigation::ChildPanelFocused();
     ImGui::NewFrame();
     if (loading) {
         LoadingScreen();
@@ -1767,9 +1935,7 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent) {
     if (NoticeActive()) {
         Notice();
     }
-    if (trophy_until.load(std::memory_order_relaxed) > NowMs()) {
-        TrophyCard();
-    }
+    Ps4RtAchievementsUi::Notification(base_scale);
     if (background_total && !loading && !menu_open) {
         BackgroundLoading();
     }

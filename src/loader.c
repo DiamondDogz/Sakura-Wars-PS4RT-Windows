@@ -266,6 +266,7 @@ static void fault(int sig, siginfo_t *info, void *context) {
     uintptr_t rip = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];
     char line[512];
     Dl_info where;
+    int pipeline_binary_fault = 0;
     int site = isa_table ? isa_rewrite_site_of_stub(isa_table, rip) : -1;
     int can_unwind = 1;
     char emulating[64] = "";
@@ -275,9 +276,13 @@ static void fault(int sig, siginfo_t *info, void *context) {
     if (site >= 0 || rip - (uintptr_t)image < 0x10000000)
         snprintf(line, sizeof(line), "Guest fault (signal %d) at guest offset 0x%lx, address %p%s\n",
                  sig, (unsigned long)(rip - (uintptr_t)image), info->si_addr, emulating);
-    else if (dladdr((void *)rip, &where) && where.dli_fname)
+    else if (dladdr((void *)rip, &where) && where.dli_fname) {
         snprintf(line, sizeof(line), "Host fault (signal %d) in %s+0x%lx (%s), address %p\n", sig, where.dli_fname,
                  (unsigned long)(rip - (uintptr_t)where.dli_fbase), where.dli_sname ? where.dli_sname : "?", info->si_addr);
+        /* Only the known Vulkan pipeline-binary SIGSEGV gets this recovery hint. */
+        pipeline_binary_fault = sig == SIGSEGV && where.dli_sname &&
+                                strstr(where.dli_sname, "InitializePipelineBinaryCache") != NULL;
+    }
     else {
         snprintf(line, sizeof(line), "Fault (signal %d) at RIP %p, address %p\n", sig, (void *)rip, info->si_addr);
         /* libc's unwinder may dereference an unmapped instruction address and
@@ -285,6 +290,13 @@ static void fault(int sig, siginfo_t *info, void *context) {
         can_unwind = 0;
     }
     { ssize_t written_=write(2, line, strlen(line)); (void)written_; }
+    if (pipeline_binary_fault) {
+        static const char hint[] =
+            "PS4RT: Pipeline binary cache initialization crashed.\n"
+            "PS4RT: Retry: PS4RT_PIPELINE_BINARIES=0 bash Play-Game.sh\n"
+            "PS4RT: If the game path is not remembered, add --game \"/path/to/CUSAxxxxx\".\n";
+        (void)write(2, hint, sizeof(hint) - 1);
+    }
 
 
     /* Host call chain (frames with unwind info; guest frames end it). */
@@ -467,6 +479,23 @@ void runtime_restart(void) {
 /* The guest code needs the PS4's instruction sets (#33, #66); PS4RT_CPU_CHECK=0 skips this. A
  * missing fatal set prints STOP and returns 0; the rewritable ones go to cpu_missing_sets, named
  * in missing. */
+/* The menu's Internal resolution: PS4RT_INTERNAL_RES=<w>x<h> (scripts/ps4rt_launch.py, from
+ * ps4rt.ini render_resolution); unset for the game's own 1920x1080. */
+static int internal_resolution(unsigned *w, unsigned *h) {
+    const char *text=getenv("PS4RT_INTERNAL_RES");
+    unsigned a=0, b=0; char x=0;
+    if (!text || sscanf(text,"%u%c%u",&a,&x,&b)!=3 || (x!='x' && x!='X') ||
+        a<640 || a>8192 || b<360 || b>8192) return 0;
+    *w=a; *h=b;
+    return 1;
+}
+
+/* A resolution other than the game's own: the Internal resolution. */
+static int resolution_mode(void) {
+    unsigned w, h;
+    return internal_resolution(&w,&h);
+}
+
 static int cpu_supported(char *missing, size_t size) {
     missing[0] = 0;
     const char *check = getenv("PS4RT_CPU_CHECK");
@@ -712,7 +741,9 @@ int main(int argc, char **argv) {
     if (!isa_table && cpu_missing_sets) { printf("STOP: this CPU lacks %s and no rewrite table matches the image\n", missing); return 20; }
     /* The stubs follow the image in the same low mapping (rel32 jmps reach them). */
     size_t stub_area = isa_table ? round_page(isa_stub_area_size(isa_table)) : 0;
-    image = allocate(round_page(size) + stub_area);
+    /* One more page after the ISA stubs for the runtime's own code stubs (rel32 calls reach
+     * it): the ultrawide experiment's in the first half, the GPU hooks' in the second. */
+    image = allocate(round_page(size) + stub_area + page_size);
     runtime_image_base = (uintptr_t)image;
     runtime_image_size = (uintptr_t)size;
     unsigned char *stubs = image + round_page(size);
@@ -799,6 +830,201 @@ int main(int argc, char **argv) {
         runtime_set_report_hook(isa_report_hook);
         protect(stubs, stub_area, 5);
     }
+    {
+        /* Sakura Wars: RsdxDevice11::CreateBuffer's memcpy of the initial data (`mov edx,[r15];
+         * mov rdi,r12; call memcpy`) goes to ps4rtgpu_new_buffer_copy, which tells the GPU
+         * buffer cache that the destination is new data (see ps4rtgpu.cpp). The stub sits in
+         * the second half of the page after the ISA stubs (rel32 reach). */
+        static const unsigned char expect[]={0x41,0x8b,0x17, 0x4c,0x89,0xe7, 0xe8,0xb5,0x2b,0x01,0x00};
+        const uint64_t site=0x10c8d90; /* first byte of expect */
+        unsigned char *p=image+site, *stub=image+round_page(size)+stub_area+page_size/2;
+        int ok=gpu_enabled && site+sizeof(expect)<=size && !memcmp(p,expect,sizeof(expect));
+        if (ok) {
+            uint64_t target=(uint64_t)(uintptr_t)&ps4rtgpu_new_buffer_copy;
+            stub[0]=0x48; stub[1]=0xb8; memcpy(stub+2,&target,8); /* movabs rax,target */
+            stub[10]=0xff; stub[11]=0xe0;                          /* jmp rax */
+            unsigned char *call=p+6;
+            int32_t rel=(int32_t)(stub-(call+5));
+            memcpy(call+1,&rel,4);
+        }
+        printf("GPU: new-buffer copy 0x%" PRIx64 " %s\n",site+6,ok?"routed to the buffer cache":"NOT MATCHED");
+        /* The GpuAddress::tileSurfaceRegion call of its region loop (0x102fa0) goes to
+         * ps4rtgpu_tile_surface_region, which tells the buffer cache when a CPU texture update
+         * rewrites a whole surface (the same arguments, so a plain jump). */
+        static const unsigned char tile_expect[]={0xe8,0x8b,0xaf,0xff,0xff};
+        const uint64_t tile_site=0x108010, tile_loop=0x102fa0;
+        unsigned char *tp=image+tile_site, *tile_stub=stub+16;
+        int tile_ok=gpu_enabled && tile_site+sizeof(tile_expect)<=size &&
+                    !memcmp(tp,tile_expect,sizeof(tile_expect));
+        if (tile_ok) {
+            uint64_t target=(uint64_t)(uintptr_t)&ps4rtgpu_tile_surface_region;
+            ps4rtgpu_set_tile_region((uintptr_t)(image+tile_loop));
+            tile_stub[0]=0x48; tile_stub[1]=0xb8; memcpy(tile_stub+2,&target,8); /* movabs rax,target */
+            tile_stub[10]=0xff; tile_stub[11]=0xe0;                               /* jmp rax */
+            int32_t rel=(int32_t)(tile_stub-(tp+5));
+            memcpy(tp+1,&rel,4);
+        }
+        printf("GPU: CPU texture tile 0x%" PRIx64 " %s\n",tile_site,tile_ok?"routed to the buffer cache":"NOT MATCHED");
+        /* Its 2D-tiled loop (0x104e10) the same way. */
+        static const unsigned char tile2d_expect[]={0xe8,0x78,0xce,0xff,0xff};
+        const uint64_t tile2d_site=0x107f93, tile2d_loop=0x104e10;
+        unsigned char *t2=image+tile2d_site, *tile2d_stub=stub+32;
+        int tile2d_ok=gpu_enabled && tile2d_site+sizeof(tile2d_expect)<=size &&
+                      !memcmp(t2,tile2d_expect,sizeof(tile2d_expect));
+        if (tile2d_ok) {
+            uint64_t target=(uint64_t)(uintptr_t)&ps4rtgpu_tile_surface_region_2d;
+            ps4rtgpu_set_tile_region_2d((uintptr_t)(image+tile2d_loop));
+            tile2d_stub[0]=0x48; tile2d_stub[1]=0xb8; memcpy(tile2d_stub+2,&target,8);
+            tile2d_stub[10]=0xff; tile2d_stub[11]=0xe0;
+            int32_t rel=(int32_t)(tile2d_stub-(t2+5));
+            memcpy(t2+1,&rel,4);
+        }
+        printf("GPU: CPU texture tile 2D 0x%" PRIx64 " %s\n",tile2d_site,tile2d_ok?"routed to the buffer cache":"NOT MATCHED");
+        if (!resolution_mode()) protect(image+round_page(size)+stub_area,page_size,5);
+    }
+    if (resolution_mode()) {
+        /* The render size: the Internal resolution. */
+        unsigned rw=0, rh=0;
+        internal_resolution(&rw,&rh);
+        /* World-anchored UI (NPC "..." bubbles, the Talk prompt) projects its
+         * anchor with the authored 1920-wide UI size, so at 21:9 it lands at 0.75x the head's
+         * offset. Each site's 5-byte width load becomes a call to a stub that loads
+         * max(width, height * viewport aspect) from the same camera, capped at 4x: unchanged at 16:9. */
+        static const unsigned char bubble_stub[]={0xc5,0xfa,0x10,0x52,0x38, 0xc5,0xea,0x59,0x51,0x48, 0xc5,0xea,0x5e,0x51,0x4c,
+            0xc5,0xfa,0x10,0x4a,0x34, 0xc5,0xf2,0x58,0xd9, 0xc5,0xe2,0x58,0xdb, 0xc5,0xea,0x5f,0xd1, 0xc5,0xea,0x5d,0xcb, 0xc3};
+        static const unsigned char talk_stub[]={0xc5,0xfb,0x10,0x42,0x34, 0xc5,0xfa,0x16,0xd0, 0xc5,0xea,0x59,0x51,0x48,
+            0xc5,0xea,0x5e,0x51,0x4c, 0xc5,0xfa,0x58,0xd8, 0xc5,0xe2,0x58,0xdb, 0xc5,0xea,0x5f,0xd0, 0xc5,0xea,0x5d,0xd3,
+            0xc4,0xe3,0x79,0x0c,0xc2,0x01, 0xc3};
+        static const struct { uint64_t site; unsigned char expect[5]; const unsigned char *stub; size_t len; const char *name; } anchors[]={
+            {0xaa62c6,{0xc5,0xfa,0x10,0x4a,0x34},bubble_stub,sizeof(bubble_stub),"NPC bubble"},
+            {0xaa0d89,{0xc5,0xfb,0x10,0x42,0x34},talk_stub,sizeof(talk_stub),"Talk prompt"},
+        };
+        unsigned char *uw_stubs=image+round_page(size)+stub_area, *at=uw_stubs;
+        for (size_t a=0;a<sizeof(anchors)/sizeof(*anchors);++a) {
+            unsigned char *p=image+anchors[a].site;
+            int ok=anchors[a].site+5<=size && !memcmp(p,anchors[a].expect,5);
+            if (ok) {
+                memcpy(at,anchors[a].stub,anchors[a].len);
+                int32_t rel=(int32_t)(at-(p+5));
+                p[0]=0xe8; memcpy(p+1,&rel,4);
+                at+=(anchors[a].len+15)&~(size_t)15;
+            }
+            printf("Resolution: %s anchor 0x%" PRIx64 " %s\n",anchors[a].name,anchors[a].site,ok?"widened":"NOT MATCHED");
+        }
+        /* More world-anchored UI with the same 1920-wide projection, all loading the UI size as
+         * `vmovs(s|d) xmmD,[B+0x34]` (width, or width and height) from the same screen object.
+         * Each load becomes a jmp to a stub that loads max(width, height * render aspect) in
+         * place of the width (the height unchanged) and jumps back: no stack, no other register,
+         * no flags; unchanged at 16:9. */
+        {
+            static const struct { uint64_t site; const char *name; } wide_ui[]={
+                {0xb3910c,"enemy HP bar"},
+                {0xb392bc,"enemy HP bar (2)"},
+                {0xaa7399,"NPC text bubble"},
+            };
+            const float render_aspect=rw&&rh ? (float)rw/(float)rh : 16.0f/9.0f;
+            for (size_t a=0;a<sizeof(wide_ui)/sizeof(*wide_ui);++a) {
+                unsigned char *p=image+wide_ui[a].site, *st=at;
+                /* c5 fb|fa 10 modrm 34: vmovsd|vmovss xmmD,[B+0x34] (mod 01, B not rsp) */
+                int ok=wide_ui[a].site+5<=size && p[0]==0xc5 && (p[1]==0xfb || p[1]==0xfa) &&
+                       p[2]==0x10 && (p[3]&0xc0)==0x40 && (p[3]&7)!=4 && p[4]==0x34 &&
+                       at+48<=uw_stubs+page_size/2;
+                if (ok) {
+                    const int pair=p[1]==0xfb, d=(p[3]>>3)&7, b=p[3]&7;
+                    const unsigned char m=(unsigned char)(0x40|d<<3|b), v=(unsigned char)(0x80|((~d&15)<<3));
+                    unsigned char *q=st;
+                    *q++=0xc5; *q++=0xfa; *q++=0x10; *q++=m; *q++=0x38;                /* vmovss xmmD,[B+0x38] (vvvv 1111) */
+                    unsigned char *mul=q;
+                    *q++=0xc5; *q++=v|2; *q++=0x59; *q++=(unsigned char)(d<<3|5); q+=4;  /* vmulss xmmD,xmmD,[rip+K] */
+                    *q++=0xc5; *q++=v|2; *q++=0x5f; *q++=m; *q++=0x34;                 /* vmaxss xmmD,xmmD,[B+0x34] */
+                    if (pair) { *q++=0xc4; *q++=0xe3; *q++=(unsigned char)(((~d&15)<<3)|1);
+                                *q++=0x21; *q++=m; *q++=0x38; *q++=0x10; }             /* vinsertps xmmD,xmmD,[B+0x38],0x10 */
+                    int32_t back=(int32_t)((p+5)-(q+5));
+                    *q++=0xe9; memcpy(q,&back,4); q+=4;                                 /* jmp site+5 */
+                    int32_t kd=(int32_t)(q-(mul+8)); memcpy(mul+4,&kd,4);
+                    memcpy(q,&render_aspect,4); q+=4;                                   /* K */
+                    int32_t to=(int32_t)(st-(p+5));
+                    p[0]=0xe9; memcpy(p+1,&to,4);
+                    at+=((size_t)(q-st)+15)&~(size_t)15;
+                }
+                printf("Resolution: %s anchor 0x%" PRIx64 " %s\n",wide_ui[a].name,wide_ui[a].site,ok?"widened":"NOT MATCHED");
+            }
+        }
+        protect(uw_stubs,page_size,5);
+        /* Skip the growth alerts of RenderTargetManager and ArukasSurfaceMemoryManager (debug
+         * traps after the buffer has been freed for reallocation at the new, larger size). */
+        static const uint64_t sites[]={0xf2dcdf,0xf2ddea,0xf2def8,0xd985df,0xd986ea,0xd987f8};
+        for (size_t s=0;s<sizeof(sites)/sizeof(*sites);++s) {
+            unsigned char *p=image+sites[s];
+            int32_t rel; memcpy(&rel,p-4,4);
+            int ok=p[0]==0xcd && p[1]==0x41 && p[-5]==0xe8 && sites[s]+rel==0xf95a80;
+            if (ok) { p[0]=0x66; p[1]=0x90; }
+            printf("Resolution: alert trap 0x%" PRIx64 " %s\n",sites[s],ok?"skipped":"NOT MATCHED");
+        }
+        /* The render target pool starts at a fixed 400 MiB (580 MiB when sceKernelIsNeoMode),
+         * enough for every 16:9 scene. A wider render outgrows it on the first field load, and
+         * the game then frees and regrows the pool mid-scene: for that one frame the outline
+         * (PostEdge) pass reads targets that were not rendered yet, and the outlines flicker. Size
+         * it up front for the render resolution: measured field needs 434 MiB at 2560x1080 and
+         * 1149 MiB at 3840x2160 (about 77 MiB + 129.3 MiB per megapixel), plus a generous 50%
+         * for heavier scenes (unused pool costs nothing that matters), never below 400 MiB. */
+        if (rw && rh && rw<=16384 && rh<=16384) {
+            /* The game camera update (0x4bbd50, 0x4bbd80) hands SetPerspective (0xdd4740) a
+             * fixed 16:9 aspect, each call loading it from its own constant: at a wider render
+             * size the 3D scene was a 16:9 picture stretched across it (combat at 32:9: 2x).
+             * The render size's aspect keeps the vertical framing and shows more world at the
+             * sides (Hor+). 16:9 and narrower keep the constants. */
+            if ((double)rw/rh > 16.0/9.0+0.01) {
+                static const uint64_t aspect_sites[]={0x113414c,0x1134150};
+                const float wide=16.0f/9.0f, aspect=(float)rw/(float)rh;
+                for (size_t c=0;c<sizeof(aspect_sites)/sizeof(*aspect_sites);++c) {
+                    unsigned char *p=image+aspect_sites[c];
+                    int ok=aspect_sites[c]+4<=size && !memcmp(p,&wide,4);
+                    if (ok) memcpy(p,&aspect,4);
+                    printf("Resolution: camera aspect 0x%" PRIx64 " %s (%.4f)\n",aspect_sites[c],
+                           ok?"set":"NOT MATCHED",aspect);
+                }
+            }
+            double mib=1.5*(77.0+129.3*((double)rw*rh/1e6));
+            uint32_t pool=(uint32_t)(((uint64_t)mib+15)/16*16)<<20;
+            if (pool<0x19000000u) pool=0x19000000u;
+            /* test eax,eax; mov eax,0x19000000; mov ecx,0x24400000; ...; cmove rcx,rax */
+            static const unsigned char expect[]={0x85,0xc0,0xb8,0x00,0x00,0x00,0x19,0xb9,0x00,0x00,0x40,0x24};
+            unsigned char *p=image+0x1530ee;
+            int ok=0x1530ee + sizeof(expect)<=size &&!memcmp(p,expect,sizeof(expect));
+            if (ok) { memcpy(p+3,&pool,4); memcpy(p+8,&pool,4); }
+            printf("Resolution: render target pool %u MiB for %ux%u %s\n",pool>>20,rw,rh,ok?"set":"NOT MATCHED");
+            /* The pool lives in the game's GPU ("garlic") heap, a fixed 0x80000000 + 0x58700000
+             * (3463 MiB; +512 MiB when sceKernelIsNeoMode). Grow it by the pool's growth plus a
+             * generous 1 GiB for the larger textures and surfaces of the higher resolution, and
+             * grow the emulated console's direct memory (PS4RT_DMEM_MB, created on the game's
+             * first allocation, after this) by the same amount. 16:9 keeps the original sizes. */
+            if (ok && pool>0x19000000u) {
+                uint64_t extra=(uint64_t)pool-0x19000000u+(UINT64_C(1)<<30);
+                uint64_t garlic=UINT64_C(0xd8700000)+extra;
+                /* lea rcx,[rbx+0x58700000]; lea r14,[rbx+0x78700000]  ->  movabs rcx,garlic; mov r14,rcx; nop */
+                static const unsigned char heap_expect[]={0x48,0x8d,0x8b,0x00,0x00,0x70,0x58,0x4c,0x8d,0xb3,0x00,0x00,0x70,0x78};
+                unsigned char *h=image+0x14f7d2;
+                int hok=0x14f7d2 + sizeof(heap_expect)<=size && !memcmp(h,heap_expect,sizeof(heap_expect));
+                if (hok) {
+                    h[0]=0x48; h[1]=0xb9; memcpy(h+2,&garlic,8);
+                    h[10]=0x49; h[11]=0x89; h[12]=0xce; h[13]=0x90;
+                    unsigned long need=5056+(unsigned long)(extra>>20);
+                    const char *cur=getenv("PS4RT_DMEM_MB");
+                    if (!cur || strtoul(cur,NULL,10)<need) {
+                        char text[32]; snprintf(text,sizeof(text),"%lu",need);
+#ifdef _WIN32
+                        _putenv_s("PS4RT_DMEM_MB",text);
+#else
+                        setenv("PS4RT_DMEM_MB",text,1);
+#endif
+                    }
+                }
+                printf("Resolution: GPU heap %" PRIu64 " MiB, direct memory %s MiB %s\n",garlic>>20,
+                       getenv("PS4RT_DMEM_MB")?getenv("PS4RT_DMEM_MB"):"5056",hok?"set":"NOT MATCHED");
+            }
+        }
+    }
     protect(traps, round_page((import_count + 1) * 32), 5);
     protect(image, round_page(size), 0);
     int executable_entry = 0;
@@ -832,7 +1058,28 @@ int main(int argc, char **argv) {
     }
     printf("Entering original x86-64 code at guest offset 0x%" PRIx64 "\n", entry);
     entered_game=1;
-    struct { uint64_t argc; const char *argv[2]; } params = {1, {"/app0/eboot.bin", NULL}};
+    /* The game's argv: its path, then the Internal resolution through the engine's own
+     * options: --renderres is the 3D scene, --res the display buffer the HUD and 2D screens are
+     * drawn in, both the same size. A smaller scene than display is not scaled by the engine: it
+     * composes the scene 1:1 into the top-left corner of the display (tested at 1280x720 in
+     * 1920x1080). */
+    struct { uint64_t argc; const char *argv[6]; } params = {1, {"/app0/eboot.bin", NULL}};
+    unsigned iw, ih;
+    if (internal_resolution(&iw,&ih)) {
+        static char options[4][32];
+        const unsigned dw=iw, dh=ih;
+        snprintf(options[0],sizeof(options[0]),"--res_x=%u",dw);
+        snprintf(options[1],sizeof(options[1]),"--res_y=%u",dh);
+        snprintf(options[2],sizeof(options[2]),"--renderres_x=%u",iw);
+        snprintf(options[3],sizeof(options[3]),"--renderres_y=%u",ih);
+        for (int o=0;o<4;++o) params.argv[params.argc++]=options[o];
+        params.argv[params.argc]=NULL;
+    }
+    if (params.argc>1) {
+        printf("Runtime: game arguments:");
+        for (uint64_t a=1;a<params.argc;++a) printf(" %s",params.argv[a]);
+        putchar('\n');
+    }
 #ifdef _WIN32
     typedef void (ABI *Entry)(void *, void (ABI *)(void));
     ((Entry)(image + entry))(&params, guest_exit);

@@ -17,12 +17,14 @@
 
 #include <vk_mem_alloc.h>
 
+#include "ps4rt_graphics.h"
 #include "ps4rt_settings.h"
 #include "ps4rt_toggles.h"
 #include "ffx_vk_portable.h"
 #include "video_core/host_shaders/upscale_merge_comp.h"
 #include "video_core/host_shaders/upscale_merge_unorm_comp.h"
 #include "video_core/host_shaders/upscale_reactive_comp.h"
+#include "video_core/host_shaders/fsr4_depth_comp.h"
 #include "video_core/host_shaders/taa_comp.h"
 #include "video_core/host_shaders/taa_sharpen_comp.h"
 #include "video_core/host_shaders/taa_sharpen_ldr_comp.h"
@@ -104,8 +106,13 @@ TemporalUpscaler::TemporalUpscaler(const Instance& instance_, Scheduler& schedul
     // Explicit resolution overrides retain the old compatibility path. Normal presets
     // keep guest allocations/UI native and change only host raster targets at frame boundaries.
     scaled_session = std::getenv("PS4RT_RENDER_RES") && std::getenv("PS4RT_RENDER_RES")[0];
-    render_width = 1920;
-    render_height = 1080;
+    {
+        // The scene size this run: 1920x1080, or the menu's Internal resolution.
+        int sw = 1920, sh = 1080;
+        Ps4RtSettings::SceneSize(sw, sh);
+        render_width = u32(sw);
+        render_height = u32(sh);
+    }
     if (const char* res = std::getenv("PS4RT_RENDER_RES")) {
         u32 w = 0, h = 0;
         if (std::sscanf(res, "%ux%u", &w, &h) == 2 && w && h) {
@@ -145,14 +152,16 @@ bool TemporalUpscaler::Active() const {
            (Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerFsr3 ||
             Ps4RtSettings::IsFsr4(Ps4RtSettings::Get().upscaler) ||
             Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerTaa ||
-            Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerDlss) &&
+            Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerDlss ||
+            Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerFsr1) &&
            !Ps4RtToggle::Disabled(1u << 24);
 }
 
 bool TemporalUpscaler::ReactiveOn() const {
     // FSR 4 takes no reactive mask: the opaque snapshot and the mask pass would be wasted.
     return Ps4RtSettings::Get().reactive && !Ps4RtToggle::Disabled(1u << 27) && !UseFsr4() && !UseDlss() &&
-           Ps4RtSettings::Get().upscaler != Ps4RtSettings::UpscalerTaa;
+           Ps4RtSettings::Get().upscaler != Ps4RtSettings::UpscalerTaa &&
+           Ps4RtSettings::Get().upscaler != Ps4RtSettings::UpscalerFsr1;
 }
 
 void TemporalUpscaler::OnSceneColor(VideoCore::ImageId color) {
@@ -187,7 +196,10 @@ void TemporalUpscaler::BeforeDisplay() {
             RunScaled();
         }
         if (Active() && !ui_phase && !dispatched_last_frame)
-            Ps4RtSettings::Get().temporal_problem = "FSR is waiting for a 3D scene; original rendering is active.";
+            Ps4RtSettings::Get().temporal_problem =
+                fsr1_idle ? "FSR 1 only upscales and sharpens: at Native output with Sharpening at "
+                            "0% the original image is shown."
+                          : "FSR is waiting for a 3D scene; original rendering is active.";
         return;
     }
 }
@@ -229,12 +241,16 @@ bool TemporalUpscaler::OnFrameStart() {
     const bool active = Active();
     const bool jitter_on = active && settings.jitter && !Ps4RtToggle::Disabled(1u << 25);
     const int upscaler = settings.upscaler.load();
+    // FSR output: chosen in the menu, applied live (the presenter's frame and the HUD's host
+    // targets follow it); Native or a choice that does not fit is the scene size.
     const int output = settings.output_res.load();
     const bool output_changed = !scaled_session && applied_output != output;
     if (output_changed) {
-        target_width = Ps4RtSettings::OutputWidths[output];
-        target_height = Ps4RtSettings::OutputHeights[output];
-        std::printf("Output resolution: %ux%u (live)\n", target_width, target_height);
+        int ow = 1920, oh = 1080;
+        Ps4RtSettings::FsrOutputSize(ow, oh);
+        target_width = u32(ow);
+        target_height = u32(oh);
+        std::printf("FSR output: %ux%u (live)\n", target_width, target_height);
         failed = false;
         fsr4_failed = false;
     }
@@ -251,15 +267,18 @@ bool TemporalUpscaler::OnFrameStart() {
     // On GPUs without D32S8 blit support, UI depth is cleared instead of copied from scene.
     if (!scaled_session) {
         if (settings.CompactGraphicsMenu()) {
+            // The guest targets are the scene size (the Internal resolution): no reduced
+            // proxies (SceneTargets stays at its native size), FSR reads them directly.
             auto size=camera_motion.RenderSize();
-            if (!size[0] || !size[1]) size={1920,1080};
-            scene_targets.SetSize({size[0],size[1]});
+            if (!size[0] || !size[1]) size={SceneResolution::game_scene.width,SceneResolution::game_scene.height};
+            render_width = size[0];
+            render_height = size[1];
         } else {
             scene_targets.SetSize(SceneResolution::ForPreset(active ? preset : 0,
                                                             {target_width,target_height}));
+            render_width = scene_targets.Size().width;
+            render_height = scene_targets.Size().height;
         }
-        render_width = scene_targets.Size().width;
-        render_height = scene_targets.Size().height;
     }
     Ps4RtSettings::Get().active_render_width = Scaled() ? render_width : scene_targets.Size().width;
     Ps4RtSettings::Get().active_render_height = Scaled() ? render_height : scene_targets.Size().height;
@@ -320,7 +339,7 @@ void TemporalUpscaler::OnSakuraSceneEnd() {
     if (SakuraScaled()) return;
     if (done_this_frame || failed || !Active()) return;
     done_this_frame = true;
-    // Native AA on the 1920x1080 scene; the presenter scales it to any output size.
+    // Native AA on the scene; the presenter scales it to any output size.
     if (!scene_color || !camera_motion.Ready()) {
         static unsigned reports = 0; // bounded scope report
         if (reports < 3) {
@@ -345,7 +364,7 @@ void TemporalUpscaler::OnSakuraSceneEnd() {
 void TemporalUpscaler::OnSakuraDraw(VideoCore::ImageId color, u64 ps_hash) {
     if (!scene_color || sakura_post || !color) return;
     const auto& image = texture_cache.GetImage(color);
-    if (image.info.size.width != 1920 || image.info.size.height != 1080 ||
+    if (!SceneResolution::IsGameScene(image.info.size.width, image.info.size.height) ||
         (image.info.pixel_format != vk::Format::eR8G8B8A8Unorm &&
          image.info.pixel_format != vk::Format::eR8G8B8A8Srgb) ||
         DisplayRegistry::IsDisplayBuffer(image.info.guest_address))
@@ -364,12 +383,15 @@ bool TemporalUpscaler::EnsureResources(u32 w, u32 h, u32 ow, u32 oh, bool hdr) {
     // DLSS, like FSR 4, has its own context: no portable FSR 3 context is made.
     const bool use_fsr4 = UseFsr4() || UseDlss();
     const bool use_taa = Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerTaa;
+    // FSR 1 needs no FSR 3 context either (its pass is made on first use).
+    const bool use_fsr1 = Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerFsr1;
     if (use_taa && (w != ow || h != oh)) {
         std::printf("TAA: remove PS4RT_RENDER_RES to use native-resolution TAA\n");
         return false;
     }
     if (resources_ready && w == width && h == height && ow == out_width && oh == out_height &&
-        hdr == context_hdr && use_fsr4 == resources_fsr4 && use_taa == resources_taa) {
+        hdr == context_hdr && use_fsr4 == resources_fsr4 && use_taa == resources_taa &&
+        use_fsr1 == resources_fsr1) {
         return true;
     }
     const auto device = instance.GetDevice();
@@ -409,7 +431,7 @@ bool TemporalUpscaler::EnsureResources(u32 w, u32 h, u32 ow, u32 oh, bool hdr) {
     create_info.maxRenderSize = {w, h};
     create_info.maxOutputSize = {ow, oh};
     // FSR 4 has its own model context (vk_fsr4); the images below are shared.
-    if (!use_fsr4 && !use_taa) {
+    if (!use_fsr4 && !use_taa && !use_fsr1) {
         if (const u64 issues = ffxVkPortableValidateUpscaleCreateInfo(&create_info)) {
             PrintIssues("create info", issues);
             return false;
@@ -494,6 +516,12 @@ bool TemporalUpscaler::EnsureResources(u32 w, u32 h, u32 ow, u32 oh, bool hdr) {
                    vk::ImageUsageFlagBits::eTransferSrc);
     make_image(reactive_image, reactive_view, vk::Format::eR8Unorm,
                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
+    fsr4_depth_view.reset();
+    fsr4_depth_image = VideoCore::UniqueImage{};
+    if (use_fsr4) {
+        make_image(fsr4_depth_image, fsr4_depth_view, vk::Format::eR32Sfloat,
+                   vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
+    }
     for (u32 i = 0; i < taa_history.size(); ++i) {
         taa_history_views[i].reset();
         taa_history[i] = VideoCore::UniqueImage{};
@@ -511,6 +539,7 @@ bool TemporalUpscaler::EnsureResources(u32 w, u32 h, u32 ow, u32 oh, bool hdr) {
     resources_ready = true;
     resources_fsr4 = use_fsr4;
     resources_taa = use_taa;
+    resources_fsr1 = use_fsr1;
     if (use_taa) {
         std::printf("TAA: context %ux%u -> %ux%u (%s), no FSR model\n", w, h, ow, oh,
                     hdr ? "HDR scene color" : "tonemapped frame");
@@ -518,6 +547,10 @@ bool TemporalUpscaler::EnsureResources(u32 w, u32 h, u32 ow, u32 oh, bool hdr) {
     }
     if (use_fsr4) {
         std::printf("Upscaler: FSR 4 inputs %ux%u -> %ux%u\n", w, h, ow, oh);
+        return true;
+    }
+    if (use_fsr1) {
+        std::printf("Upscaler: FSR 1 inputs %ux%u -> %ux%u (tonemapped frame)\n", w, h, ow, oh);
         return true;
     }
     FfxVkPortableMemoryUsage usage{};
@@ -598,6 +631,29 @@ void TemporalUpscaler::CreatePipelines() {
     merge_unorm_pipeline = compute(UPSCALE_MERGE_UNORM_COMP, *merge_pipeline_layout);
     storage_layout(3, reactive_desc_layout, reactive_pipeline_layout, 3 * sizeof(float));
     reactive_pipeline = compute(UPSCALE_REACTIVE_COMP, *reactive_pipeline_layout);
+    {
+        // Standard depth for FSR 4: the game's depth (sampled) to an R32F storage image.
+        const std::array<vk::DescriptorSetLayoutBinding, 2> bindings{{
+            {.binding = 0,
+             .descriptorType = vk::DescriptorType::eSampledImage,
+             .descriptorCount = 1,
+             .stageFlags = vk::ShaderStageFlagBits::eCompute},
+            {.binding = 1,
+             .descriptorType = vk::DescriptorType::eStorageImage,
+             .descriptorCount = 1,
+             .stageFlags = vk::ShaderStageFlagBits::eCompute},
+        }};
+        fsr4_depth_desc_layout = Check(device.createDescriptorSetLayoutUnique({
+            .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+            .bindingCount = u32(bindings.size()),
+            .pBindings = bindings.data(),
+        }));
+        fsr4_depth_pipeline_layout = Check(device.createPipelineLayoutUnique({
+            .setLayoutCount = 1,
+            .pSetLayouts = &*fsr4_depth_desc_layout,
+        }));
+        fsr4_depth_pipeline = compute(FSR4_DEPTH_COMP, *fsr4_depth_pipeline_layout);
+    }
     storage_layout(2, taa_sharpen_desc_layout, taa_sharpen_pipeline_layout, sizeof(float));
     taa_sharpen_pipeline = compute(TAA_SHARPEN_COMP, *taa_sharpen_pipeline_layout);
     taa_sharpen_ldr_pipeline = compute(TAA_SHARPEN_LDR_COMP, *taa_sharpen_pipeline_layout);
@@ -1002,7 +1058,8 @@ bool TemporalUpscaler::SupportsUnormScene() const {
 }
 
 void TemporalUpscaler::Run() {
-    
+    // FSR 1 runs only on the scaled path (RunScaled); this path would need an FSR 3 context.
+    if (Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerFsr1) return;
     auto& color = texture_cache.GetImage(scene_color);
     auto& depth = texture_cache.GetImage(camera_motion.Depth());
     const u32 ow = color.info.size.width, oh = color.info.size.height;
@@ -1164,7 +1221,7 @@ void TemporalUpscaler::Run() {
         dispatched = true;
     } else if (UseFsr4()) {
         dispatched = RecordFsr4(cmdbuf, {input_color, input_color_view, w, h},
-                                {input_depth, input_depth_view, w, h}, w, h, ow, oh, frame_ms);
+                                {input_depth, input_depth_view, w, h}, w, h, ow, oh, frame_ms, true);
     } else if (UseDlss()) {
         dispatched = RecordDlss(
             cmdbuf,
@@ -1390,19 +1447,19 @@ void TemporalUpscaler::OnColorTarget(VideoCore::ImageId color) {
 void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
                               VideoCore::ImageId depth, bool native_viewport, bool blended,u64 ps_hash) {
     if (Ps4RtSettings::Get().native_scene) {
-        // CUSA16429: the last full-screen 1080p RGBA8 target after the tonemap is the finished
-        // frame the display pass copies before drawing the HUD.
+        // CUSA16429: the last full-screen scene-size RGBA8 target after the tonemap is the
+        // finished frame the display pass copies before drawing the HUD.
         if (sakura_post && color && native_viewport && !ui_phase) {
             const auto& image = texture_cache.GetImage(color);
             const bool display = DisplayRegistry::IsDisplayBuffer(image.info.guest_address);
-            if (image.info.size.width == 1920 && image.info.size.height == 1080 &&
+            if (SceneResolution::IsGameScene(image.info.size.width, image.info.size.height) &&
                 (image.info.pixel_format == vk::Format::eR8G8B8A8Unorm ||
                  image.info.pixel_format == vk::Format::eR8G8B8A8Srgb) && !display)
                 ldr_target = color;
         }
         if (color && native_viewport && Ps4RtCamera::Tonemap(vs_hash,ps_hash)) {
             const auto& image = texture_cache.GetImage(color);
-            if (image.info.size.width == 1920 && image.info.size.height == 1080 &&
+            if (SceneResolution::IsGameScene(image.info.size.width, image.info.size.height) &&
                 image.info.pixel_format == vk::Format::eR8G8B8A8Unorm &&
                 !DisplayRegistry::IsDisplayBuffer(image.info.guest_address)) ldr_target = color;
         }
@@ -1664,8 +1721,10 @@ void TemporalUpscaler::AnnounceSceneDispatch(u32 w, u32 h, u32 ow, u32 oh, int p
     static int reported_provider = -1;
     static u32 reported_width = 0, reported_height = 0;
     if (provider != reported_provider || reported_width != ow || reported_height != oh) {
-        std::printf("PS4RT: %s dispatched %ux%u -> %ux%u before display/HUD, reversed depth\n",
-                    Ps4RtSettings::UpscalerName(provider),w,h,ow,oh);
+        // FSR 1 takes colour only; the others read the game's reversed depth.
+        std::printf("PS4RT: %s dispatched %ux%u -> %ux%u before display/HUD%s\n",
+                    Ps4RtSettings::UpscalerName(provider), w, h, ow, oh,
+                    provider == Ps4RtSettings::UpscalerFsr1 ? "" : ", reversed depth");
         reported_provider = provider; reported_width = ow; reported_height = oh;
     }
 }
@@ -1742,7 +1801,8 @@ void TemporalUpscaler::RunScaled() {
     barrier(vk::Image(motion_image), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eUndefined,
             all, vk::AccessFlagBits2::eNone, vk::ImageLayout::eGeneral,
             vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite);
-    camera_motion.RecordMotion(cmdbuf, depth_view, *motion_view, w, h);
+    const bool spatial = Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerFsr1;
+    if (!spatial) camera_motion.RecordMotion(cmdbuf, depth_view, *motion_view, w, h);
     barrier(vk::Image(motion_image), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eGeneral,
             vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite,
             vk::ImageLayout::eGeneral, all, vk::AccessFlagBits2::eShaderRead);
@@ -1757,13 +1817,17 @@ void TemporalUpscaler::RunScaled() {
     last_frame = now;
 
     // ps4rt: FSR 4 writes its HDR-format output, copied into the output-size UI image.
-    if (UseFsr4() || UseDlss() || Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerTaa) {
+    fsr1_idle = false;
+    if (UseFsr4() || UseDlss() || spatial || Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerTaa) {
         barrier(vk::Image(output_image), vk::ImageAspectFlagBits::eColor,
                 vk::ImageLayout::eUndefined, all, vk::AccessFlagBits2::eNone,
                 vk::ImageLayout::eGeneral, all, rw);
         bool ok4 = true;
         if (Ps4RtSettings::Get().upscaler == Ps4RtSettings::UpscalerTaa) {
             RecordTaa(cmdbuf, color_view, depth_view);
+        } else if (spatial) {
+            ok4 = RecordFsr1(cmdbuf, color_view, source_width, source_height, w, h, ow, oh);
+            fsr1_idle = !ok4;
         } else if (UseDlss()) {
             ok4 = RecordDlss(cmdbuf,
                              {color_image, color_view, color.info.pixel_format,
@@ -1772,12 +1836,15 @@ void TemporalUpscaler::RunScaled() {
                               source_width, source_height},
                              w, h, ow, oh, frame_ms, false);
         } else {
+            // The game's tonemapped frame is display-range input, as FSR 3's context is made
+            // for it. Read as HDR with auto exposure, FSR 4's exposure followed the view and the
+            // image pulsed brighter and dimmer while running past bright lighting (CUSA16429).
             ok4 = RecordFsr4(cmdbuf, {color_image, color_view, source_width, source_height},
                             {depth_image, depth_view, source_width, source_height}, w, h, ow,
-                            oh, frame_ms);
+                            oh, frame_ms, false);
         }
         if (ok4) {
-            if (Ps4RtSettings::Get().upscaler != Ps4RtSettings::UpscalerTaa) {
+            if (Ps4RtSettings::Get().upscaler != Ps4RtSettings::UpscalerTaa && !spatial) {
                 ExtraSharpen(cmdbuf, vk::Image(output_image), false, ow, oh);
             }
             barrier(vk::Image(output_image), vk::ImageAspectFlagBits::eColor,
@@ -1934,7 +2001,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
     auto& display = displays[address];
     if (!display_redirect) {
         if (Ps4RtSettings::Get().native_scene && display.valid &&
-            image.info.size.width == 1920 && image.info.size.height == 1080 &&
+            SceneResolution::IsGameFrame(image.info.size.width, image.info.size.height) &&
             image.info.resources.levels == 1 && image.info.resources.layers == 1 &&
             image.backing->num_samples == 1 && display.format == image.info.pixel_format &&
             (display.format == vk::Format::eR8G8B8A8Unorm ||
@@ -1947,8 +2014,8 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
             // before the game's draw/clear, so genuine black/fade writes win.
             runtime.FlushBarriers();
             CopyDisplayForRendering(scheduler, vk::Image(display.image),
-                {display.width, display.height}, image.GetImage(), {1920,1080},
-                image.backing->state.layout);
+                {display.width, display.height}, image.GetImage(),
+                {image.info.size.width, image.info.size.height}, image.backing->state.layout);
         }
         display.valid = false; // not upscaled: the presenter shows the guest buffer
         return false;
@@ -2028,8 +2095,12 @@ void TemporalUpscaler::OnFrameCopy(u64 cs_hash, VideoCore::ImageId source,
 bool TemporalUpscaler::RedirectGrade(VideoCore::ImageId color, const VideoCore::ImageViewInfo& view,
                                      Target& target) {
     const auto& image = texture_cache.GetImage(color);
-    if (ui_graded || !ui_frame_copied || color == ui_color || image.info.size.width != 1920 ||
-        image.info.size.height != 1080 || image.info.resources.levels != 1 ||
+    // The final colour pass's target: the finished frame's size (the scene's, or the display
+    // buffer's when manual engine options make them differ).
+    if (ui_graded || !ui_frame_copied || color == ui_color ||
+        !(SceneResolution::IsGameScene(image.info.size.width, image.info.size.height) ||
+          SceneResolution::IsGameFrame(image.info.size.width, image.info.size.height)) ||
+        image.info.resources.levels != 1 ||
         image.info.resources.layers != 1 || image.backing->num_samples != 1 ||
         (image.info.pixel_format != vk::Format::eR8G8B8A8Unorm &&
          image.info.pixel_format != vk::Format::eR8G8B8A8Srgb) ||
@@ -2213,8 +2284,8 @@ bool TemporalUpscaler::RedirectSampled(VideoCore::ImageId image,
         const auto& guest = texture_cache.GetImage(image).info;
         std::scoped_lock lock{display_mutex};
         const auto it = displays.find(guest.guest_address);
-        if (it != displays.end() && it->second.valid && guest.size.width == 1920 &&
-            guest.size.height == 1080 && guest.num_samples == 1) {
+        if (it != displays.end() && it->second.valid &&
+            SceneResolution::IsGameFrame(guest.size.width, guest.size.height) && guest.num_samples == 1) {
             auto& display = it->second;
             const auto family = [](vk::Format format) {
                 if (format == vk::Format::eR8G8B8A8Unorm || format == vk::Format::eR8G8B8A8Srgb) return 1;
@@ -2230,13 +2301,14 @@ bool TemporalUpscaler::RedirectSampled(VideoCore::ImageId image,
                     display.sampled_image = VideoCore::UniqueImage(instance.GetDevice(), instance.GetAllocator());
                     display.sampled_image.Create({.flags = vk::ImageCreateFlagBits::eMutableFormat,
                         .imageType = vk::ImageType::e2D, .format = display.format,
-                        .extent = {1920,1080,1}, .mipLevels = 1, .arrayLayers = 1,
+                        .extent = {guest.size.width, guest.size.height, 1}, .mipLevels = 1, .arrayLayers = 1,
                         .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
                         .usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled |
                                  vk::ImageUsageFlagBits::eColorAttachment});
                 }
                 CopyDisplayForSampling(scheduler, vk::Image(display.image), {display.width,display.height},
-                    vk::Image(display.sampled_image), {1920,1080}, display.sampled_initialized);
+                    vk::Image(display.sampled_image), {guest.size.width, guest.size.height},
+                    display.sampled_initialized);
                 display.sampled_initialized = true;
                 view = Mirror(vk::Image(display.sampled_image), display.sampled_views, info.format, info.mapping);
                 layout = vk::ImageLayout::eGeneral;
@@ -2296,8 +2368,56 @@ bool TemporalUpscaler::UseFsr4() const {
 
 bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image color,
                                   Fsr4Upscaler::Image depth, u32 w, u32 h, u32 ow, u32 oh,
-                                  float frame_ms) {
+                                  float frame_ms, bool hdr) {
     const auto& settings = Ps4RtSettings::Get();
+    // FSR 4 v07 takes each pixel's motion vector from the nearest of its 3x3 depths, comparing
+    // for standard depth: the provider never passes DEPTH_INVERTED to its shaders. With reversed
+    // depth it took the farther neighbour at every edge, e.g. the sky's motion for a character's
+    // outline. A reversed-depth game gets a standard-depth copy (CUSA16429).
+    if (camera_motion.DepthInverted() && fsr4_depth_pipeline && fsr4_depth_view) {
+        const vk::Image standard = vk::Image(fsr4_depth_image);
+        const auto barrier = [&](vk::ImageLayout old_layout, vk::PipelineStageFlags2 src_stage,
+                                 vk::AccessFlags2 src_access, vk::PipelineStageFlags2 dst_stage,
+                                 vk::AccessFlags2 dst_access) {
+            const vk::ImageMemoryBarrier2 b{
+                .srcStageMask = src_stage,
+                .srcAccessMask = src_access,
+                .dstStageMask = dst_stage,
+                .dstAccessMask = dst_access,
+                .oldLayout = old_layout,
+                .newLayout = vk::ImageLayout::eGeneral,
+                .image = standard,
+                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+            };
+            cmdbuf.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &b});
+        };
+        // FSR 4 read the previous frame's copy: all commands before.
+        barrier(vk::ImageLayout::eUndefined, vk::PipelineStageFlagBits2::eAllCommands,
+                vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eComputeShader,
+                vk::AccessFlagBits2::eShaderWrite);
+        const vk::DescriptorImageInfo depth_info{.imageView = depth.view,
+                                                 .imageLayout = vk::ImageLayout::eGeneral};
+        const vk::DescriptorImageInfo standard_info{.imageView = *fsr4_depth_view,
+                                                    .imageLayout = vk::ImageLayout::eGeneral};
+        const std::array<vk::WriteDescriptorSet, 2> writes{{
+            {.dstBinding = 0,
+             .descriptorCount = 1,
+             .descriptorType = vk::DescriptorType::eSampledImage,
+             .pImageInfo = &depth_info},
+            {.dstBinding = 1,
+             .descriptorCount = 1,
+             .descriptorType = vk::DescriptorType::eStorageImage,
+             .pImageInfo = &standard_info},
+        }};
+        cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *fsr4_depth_pipeline);
+        cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *fsr4_depth_pipeline_layout,
+                                    0, writes);
+        cmdbuf.dispatch((w + 7) / 8, (h + 7) / 8, 1);
+        barrier(vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eComputeShader,
+                vk::AccessFlagBits2::eShaderWrite, vk::PipelineStageFlagBits2::eComputeShader,
+                vk::AccessFlagBits2::eShaderRead);
+        depth = {standard, *fsr4_depth_view, w, h};
+    }
     // Same jitter convention as FSR 3; the menu (or toggle 1 << 26) flips it for tests.
     const float sign =
         Ps4RtToggle::Disabled(1u << 26) != settings.fsr4_invert_jitter.load() ? -1.0f : 1.0f;
@@ -2321,6 +2441,7 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image 
         .reset = reset,
         .auto_exposure = settings.fsr4_auto_exposure,
         .depth_inverted = camera_motion.DepthInverted(),
+        .hdr = hdr,
     });
     // The menu shows the reason; it outlives this frame (FSR 4 keeps its last message).
     static std::string shown;
@@ -2388,6 +2509,87 @@ bool TemporalUpscaler::RecordDlss(vk::CommandBuffer cmdbuf, const Dlss::Resource
         reset = true;
     }
     return ok;
+}
+
+bool TemporalUpscaler::RecordFsr1(vk::CommandBuffer cmdbuf, vk::ImageView color, u32 source_width,
+                                  u32 source_height, u32 w, u32 h, u32 ow, u32 oh) {
+    const auto& settings = Ps4RtSettings::Get();
+    // EASU when the output is larger, RCAS alone at Native output; neither: nothing to record.
+    if (!Ps4RtGraphics::FsrPassRuns(true, settings.sharpen, int(w), int(h), int(ow), int(oh)))
+        return false;
+    if (!fsr1) {
+        fsr1 = std::make_unique<HostPasses::FsrPass>();
+        fsr1->Create(instance.GetDevice(), instance.GetAllocator(), 2);
+    }
+    static u32 reported_w = 0, reported_h = 0;
+    static bool reported_rcas = false;
+    if (reported_w != ow || reported_h != oh || reported_rcas != settings.sharpen) {
+        reported_w = ow;
+        reported_h = oh;
+        reported_rcas = settings.sharpen;
+        std::printf("Upscaler: FSR 1 (%s%s) %ux%u -> %ux%u\n", w < ow ? "EASU" : "",
+                    settings.sharpen ? (w < ow ? " + RCAS" : "RCAS") : "", w, h, ow, oh);
+    }
+    HostPasses::FsrPass::Settings fsr{};
+    fsr.enable = true;
+    fsr.use_rcas = settings.sharpen;
+    fsr.rcas_attenuation = Ps4RtGraphics::RcasAttenuation(
+        int(std::clamp(settings.sharpness.load(), 0.0f, 1.0f) * 100.0f));
+    // The scene fills the top-left w x h of the source; the input is the game's tonemapped
+    // frame (display range), in General layout.
+    fsr.input_viewport = vk::Extent2D{w, h};
+    fsr.input_layout = vk::ImageLayout::eGeneral;
+    fsr1->Render(cmdbuf, color, {source_width, source_height}, {ow, oh}, fsr, false);
+    const vk::Image result = fsr1->LastOutputImage();
+    if (!result) return false;
+    // FSR 1 output (ShaderReadOnlyOptimal, RGBA16F like output_image) -> output_image (General).
+    const std::array<vk::ImageMemoryBarrier2, 2> to_copy{{
+        {.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+         .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
+         .dstStageMask = vk::PipelineStageFlagBits2::eCopy,
+         .dstAccessMask = vk::AccessFlagBits2::eTransferRead,
+         .oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+         .newLayout = vk::ImageLayout::eTransferSrcOptimal,
+         .image = result,
+         .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}},
+        {.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+         .srcAccessMask = vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eShaderWrite,
+         .dstStageMask = vk::PipelineStageFlagBits2::eCopy,
+         .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+         .oldLayout = vk::ImageLayout::eGeneral,
+         .newLayout = vk::ImageLayout::eGeneral,
+         .image = vk::Image(output_image),
+         .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}},
+    }};
+    cmdbuf.pipelineBarrier2({.imageMemoryBarrierCount = u32(to_copy.size()),
+                             .pImageMemoryBarriers = to_copy.data()});
+    cmdbuf.copyImage(result, vk::ImageLayout::eTransferSrcOptimal, vk::Image(output_image),
+                     vk::ImageLayout::eGeneral,
+                     vk::ImageCopy{.srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+                                   .dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+                                   .extent = {ow, oh, 1}});
+    // Back to the layout the pass expects next time it writes this image.
+    const std::array<vk::ImageMemoryBarrier2, 2> after{{
+        {.srcStageMask = vk::PipelineStageFlagBits2::eCopy,
+         .srcAccessMask = vk::AccessFlagBits2::eTransferRead,
+         .dstStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+         .dstAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
+         .oldLayout = vk::ImageLayout::eTransferSrcOptimal,
+         .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+         .image = result,
+         .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}},
+        {.srcStageMask = vk::PipelineStageFlagBits2::eCopy,
+         .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+         .dstStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+         .dstAccessMask = vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eShaderWrite,
+         .oldLayout = vk::ImageLayout::eGeneral,
+         .newLayout = vk::ImageLayout::eGeneral,
+         .image = vk::Image(output_image),
+         .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}},
+    }};
+    cmdbuf.pipelineBarrier2({.imageMemoryBarrierCount = u32(after.size()),
+                             .pImageMemoryBarriers = after.data()});
+    return true;
 }
 
 } // namespace Vulkan

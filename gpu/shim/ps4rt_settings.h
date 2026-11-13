@@ -12,7 +12,9 @@
 namespace Ps4RtSettings {
 
 enum Upscaler : int { UpscalerOff = 0, UpscalerFsr3 = 1, UpscalerFsr4 = 2, UpscalerFsr411 = 3,
-                      UpscalerTaa = 4, UpscalerDlss = 5, UpscalerCount };
+                      UpscalerTaa = 4, UpscalerDlss = 5,
+                      /* Spatial FSR 1 on the scene before the HUD (no motion, no history). */
+                      UpscalerFsr1 = 6, UpscalerCount };
 /// FSR 4 v07 or FSR 4.1.1: the same inputs, settings and placement in the frame.
 inline bool IsFsr4(int upscaler) {
     return upscaler == UpscalerFsr4 || upscaler == UpscalerFsr411;
@@ -20,11 +22,27 @@ inline bool IsFsr4(int upscaler) {
 enum Preset : int { NativeAA = 0, Quality, Balanced, Performance, UltraPerformance, PresetCount };
 enum DebugView : int { DebugNone = 0, DebugReactive = 1, DebugMotion = 2, DebugViewCount };
 
-/// Live output resolutions: the upscaler's output and the UI host targets.
-inline constexpr int OutputWidths[] = {1280, 1920, 2560, 3840};
-inline constexpr int OutputHeights[] = {720, 1080, 1440, 2160};
-inline constexpr int OutputCount = 4;
-inline constexpr int OutputDefault = 1; ///< 1920x1080, the game's own size
+/// FSR output resolutions (live): the upscaler's output and the HUD's host targets (the Code
+/// Fairy port's list). 0 is Native (FSR anti-aliasing at the internal resolution).
+inline constexpr int OutputWidths[] = {0, 1920, 2560, 3840, 3440, 3840, 5120};
+inline constexpr int OutputHeights[] = {0, 1080, 1440, 2160, 1440, 1440, 1440};
+inline constexpr int OutputCount = 7;
+inline constexpr int OutputNative = 0;
+inline constexpr int OutputDefault = OutputNative;
+
+/// An output can be chosen for an internal resolution when it is larger in both dimensions, at
+/// most 3x (FSR's range), and has the same aspect within 1% (2560x1080 -> 3440x1440 is the only
+/// inexact pair). Native always.
+bool OutputAllowed(int internal_width, int internal_height, int output);
+/// The scene size this launch renders at: PS4RT_INTERNAL_RES (the launcher, from the menu's
+/// Internal resolution), else 1920x1080.
+void SceneSize(int& width, int& height);
+/// The game's display buffer size this launch (the engine's --res): the scene size for the
+/// Internal resolution (src/loader.c), else 1920x1080.
+void GameDisplaySize(int& width, int& height);
+/// The FSR output (live): output_res fitted to the scene aspect (never stretched),
+/// or the scene size for Native or a choice that does not fit this internal resolution.
+void FsrOutputSize(int& width, int& height);
 
 struct Values {
     // Native-scene path inherited from the template runtime; intentionally game-adaptable.
@@ -54,7 +72,8 @@ struct Values {
     std::atomic<int> overlay_scale{100}, overlay_corner{1}, overlay_opacity{50}, overlay_layout{0};
     std::atomic<int> menu_tab{0};
     // Graphics (ps4rt_graphics.h). Live: applied on the next frame.
-    std::atomic<int> display_mode{0};
+    /// Ps4RtGraphics::DisplayMode; a first launch (no display_mode= in ps4rt.ini) is borderless.
+    std::atomic<int> display_mode{1};
     std::atomic<bool> vsync{true};
     std::atomic<int> fps_limit{0};
     std::atomic<bool> async_shaders{false};
@@ -88,6 +107,13 @@ struct Values {
     std::atomic<int> graphics_preset{0};
     std::atomic<bool> graphics_preset_available{false};
     int startup_anisotropy = 0;
+    /// Game language: the emulated console (PS4 system) language ID this launch started with
+    /// (ps4rt_launch.py sets PS4RT_LANGUAGE and the offered PS4RT_LANGUAGE_CHOICES); -1 when the
+    /// launcher offers no choice. A different selection is only a pending change (ps4rt.ini
+    /// language=) that the launcher applies before the next start; ps4rt.ini never holds the
+    /// current language.
+    std::atomic<int> language{-1};
+    int startup_language = -1;
     /// Set before an "Apply and restart"; cleared once the new launch shows the game. run.py
     /// restores the previous startup options when a launch never cleared it.
     std::atomic<bool> restart_unconfirmed{false};

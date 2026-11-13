@@ -125,6 +125,7 @@ add_host_shader(transition_alpha.comp transition_alpha_comp)
 add_host_shader(upscale_merge.comp upscale_merge_comp)
 add_host_shader(upscale_merge.comp upscale_merge_unorm_comp SCENE_UNORM=1)
 add_host_shader(upscale_reactive.comp upscale_reactive_comp)
+add_host_shader(fsr4_depth.comp fsr4_depth_comp)
 add_host_shader(taa.comp taa_comp)
 add_host_shader(taa_sharpen.comp taa_sharpen_comp)
 add_host_shader(taa_sharpen.comp taa_sharpen_ldr_comp LDR_OUTPUT=1)
@@ -207,6 +208,10 @@ add_executable(sakura-camera-test EXCLUDE_FROM_ALL ../tests/test_sakura_camera.c
 target_include_directories(sakura-camera-test PRIVATE shadps4)
 target_compile_options(sakura-camera-test PRIVATE -UNDEBUG)
 add_test(NAME sakura-camera COMMAND sakura-camera-test)
+add_executable(pipeline-binary-policy-test EXCLUDE_FROM_ALL ../tests/test_pipeline_binary_policy.cpp)
+target_include_directories(pipeline-binary-policy-test PRIVATE shadps4)
+target_compile_options(pipeline-binary-policy-test PRIVATE -UNDEBUG)
+add_test(NAME pipeline-binary-policy COMMAND pipeline-binary-policy-test)
 add_executable(display-sample-gpu-test EXCLUDE_FROM_ALL ../tests/test_display_sample_gpu.cpp ../tests/test_gpu_runtime_stubs.cpp)
 target_include_directories(display-sample-gpu-test PRIVATE shim shadps4 third_party/gcn/include)
 target_compile_options(display-sample-gpu-test PRIVATE -UNDEBUG -fPIC)
@@ -271,3 +276,18 @@ set_source_files_properties(../tests/test_image_subresource.cpp PROPERTIES COMPI
 set_source_files_properties(../tests/test_gpu_workarounds.cpp PROPERTIES COMPILE_OPTIONS "-fvisibility=hidden;-fvisibility-inlines-hidden")
 
 target_sources(cpu-image-writeback-test PRIVATE ../tests/test_cpu_image_writeback_fault.cpp)
+
+# Local achievements (adapted from the Code Fairy port): the shared service and its
+# overlay navigation need no graphics device, guest process or original game files.
+add_executable(achievements-test EXCLUDE_FROM_ALL ../tests/test_achievements.cpp shim/ps4rt_achievements.cpp)
+target_include_directories(achievements-test PRIVATE shim)
+target_compile_options(achievements-test PRIVATE -UNDEBUG)
+add_test(NAME achievements COMMAND achievements-test)
+
+add_executable(achievements-ui-test EXCLUDE_FROM_ALL ../tests/test_achievements_ui.cpp
+    shim/ps4rt_achievements.cpp shim/ps4rt_achievements_ui.cpp
+    third_party/imgui/imgui.cpp third_party/imgui/imgui_draw.cpp
+    third_party/imgui/imgui_tables.cpp third_party/imgui/imgui_widgets.cpp)
+target_include_directories(achievements-ui-test PRIVATE shim third_party/imgui)
+target_compile_options(achievements-ui-test PRIVATE -UNDEBUG)
+add_test(NAME achievements-ui COMMAND achievements-ui-test)

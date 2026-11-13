@@ -24,6 +24,7 @@
 #include "video_core/renderer_vulkan/vk_common.h"
 #include "video_core/renderer_vulkan/vk_dlss.h"
 #include "video_core/renderer_vulkan/vk_fsr4.h"
+#include "video_core/renderer_vulkan/host_passes/fsr_pass.h"
 #include "video_core/texture_cache/image.h"
 
 struct FfxVkPortableUpscaleContext;
@@ -206,8 +207,13 @@ private:
                     bool hdr);
     /// Records FSR 4 into output_image; on a permanent failure FSR 3 takes over.
     bool RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image color, Fsr4Upscaler::Image depth,
-                    u32 w, u32 h, u32 ow, u32 oh, float frame_ms);
+                    u32 w, u32 h, u32 ow, u32 oh, float frame_ms, bool hdr);
     void RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color, vk::ImageView depth);
+    /// FSR 1 (EASU, RCAS with Sharpening) from the w x h scene in `color` (General layout) into
+    /// output_image (General). False when it has nothing to do: Native output without
+    /// sharpening.
+    bool RecordFsr1(vk::CommandBuffer cmdbuf, vk::ImageView color, u32 source_width,
+                    u32 source_height, u32 w, u32 h, u32 ow, u32 oh);
     /// Sharpness above 1 for FSR 3/4 (their RCAS stops at 1): one more RCAS pass over the target
     /// (output_image, or the 8-bit UI image with ldr) in General layout after the upscaler.
     void ExtraSharpen(vk::CommandBuffer cmdbuf, vk::Image target, bool ldr, u32 w, u32 h);
@@ -315,8 +321,12 @@ private:
     bool resources_ready = false; ///< images below match width/height/out size
     bool resources_fsr4 = false;  ///< made for FSR 4 (no FSR 3 context)
     bool resources_taa = false;
+    bool resources_fsr1 = false;  ///< made for FSR 1 (no FSR 3 context)
     std::unique_ptr<Fsr4Upscaler> fsr4;
+    /// FSR 1 (EASU + optional RCAS) for the spatial provider; created on first use.
+    std::unique_ptr<HostPasses::FsrPass> fsr1;
     bool fsr4_failed = false;
+    bool fsr1_idle = false; ///< FSR 1 selected with nothing to do (Native output, no sharpening)
     bool dlss_failed = false;
     VideoCore::UniqueImage motion_image;
     VideoCore::UniqueImage output_image;
@@ -329,6 +339,12 @@ private:
     vk::UniqueDescriptorSetLayout reactive_desc_layout;
     vk::UniquePipelineLayout reactive_pipeline_layout;
     vk::UniquePipeline reactive_pipeline;
+    /// FSR 4 v07 takes standard depth (fsr4_depth.comp): a reversed-depth game's copy, R32F.
+    VideoCore::UniqueImage fsr4_depth_image;
+    vk::UniqueImageView fsr4_depth_view;
+    vk::UniqueDescriptorSetLayout fsr4_depth_desc_layout;
+    vk::UniquePipelineLayout fsr4_depth_pipeline_layout;
+    vk::UniquePipeline fsr4_depth_pipeline;
     vk::UniqueDescriptorSetLayout merge_desc_layout;
     vk::UniquePipelineLayout merge_pipeline_layout;
     vk::UniquePipeline merge_pipeline;

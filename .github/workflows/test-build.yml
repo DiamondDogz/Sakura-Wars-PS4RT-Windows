@@ -3,13 +3,13 @@ name: Build and release
 # Compiles bin/ps4rt.exe from this branch with MSYS2 CLANG64 (the commands of
 # scripts/build_windows.sh, natively), puts it with the DLLs it needs into the player archive of
 # windows-1.1.4 (launcher and everything else unchanged), and publishes the result as a
-# pre-release windows-1.1.5-pause.N: Crowbar offers it like any runtime version.
+# pre-release windows-1.1.5-pause.N (branch sakura-1.2: windows-1.2-rc.N): Crowbar offers it like any runtime version.
 # By hand (Actions > Build and release > Run workflow) with a version: windows-VERSION, a release
 # when VERSION has no suffix (1.1.5), a pre-release otherwise (1.1.6-rc.1). That one compiles
 # nothing: it ships bin/ as committed in the branch (the binaries of the tested pre-release).
 on:
   push:
-    branches: ["crowbar-pause"]
+    branches: ["crowbar-pause", "sakura-1.2"]
   workflow_dispatch:
     inputs:
       version:
@@ -28,8 +28,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     env:
-      VERSION: ${{ inputs.version || format('1.1.5-pause.{0}', github.run_number) }}
-      BASE: windows-1.1.4
+      VERSION: ${{ inputs.version || (github.ref_name == 'sakura-1.2' && format('1.2-rc.{0}', github.run_number)) || format('1.1.5-pause.{0}', github.run_number) }}
+      BASE: windows-1.1.5
     defaults:
       run:
         shell: msys2 {0}
@@ -114,6 +114,9 @@ jobs:
             cp -f out/ps4rt.exe "$bin/ps4rt.exe"
             ldd out/ps4rt.exe | awk '/clang64/ {print $3}' | sort -u | while read -r dll; do cp -f "$dll" "$bin/"; done
           fi
+          # The scripts and FSR 4 shaders of this branch (Sakura Wars 1.2 changed both).
+          root=$(dirname "$bin")
+          git ls-files scripts fsr4_shaders | while read -r f; do mkdir -p "$root/$(dirname "$f")"; cp -f "$f" "$root/$f"; done
           name=Kagekidan-windows-$VERSION
           top=$(ls base)
           if [[ $(ls base | wc -l) == 1 && -d base/$top && $top == Kagekidan* ]]; then mv "base/$top" "base/$name"; (cd base && zip -qr -9 "../dist/$name.zip" "$name"); else (cd base && zip -qr -9 "../dist/$name.zip" .); fi

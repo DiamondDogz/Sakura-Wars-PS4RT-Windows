@@ -9,6 +9,7 @@
 #include "video_core/renderer_vulkan/ui_composition.h"
 #include "video_core/renderer_vulkan/ps4rt_camera.h"
 #include "ps4rt_toggles.h"
+#include "ps4rt_effects.h"
 #include "ps4rt_gpu_workarounds.h"
 #include "ps4rt_settings.h"
 #include "video_core/texture_cache/ps4rt_transition.h"
@@ -60,6 +61,18 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
       pipeline_cache{instance, scheduler, liverpool, buffer_cache.GetSparsePageShift()},
       host_markers_enabled{EmulatorSettings.IsVkHostMarkersEnabled()},
       guest_markers_enabled{EmulatorSettings.IsVkGuestMarkersEnabled()} {
+    // The game's scene and frame sizes this run (the menu's Internal resolution); before any
+    // draw reads them.
+    {
+        int w, h;
+        Ps4RtSettings::SceneSize(w, h);
+        SceneResolution::game_scene = {u32(w), u32(h)};
+        Ps4RtSettings::GameDisplaySize(w, h);
+        SceneResolution::game_frame = {u32(w), u32(h)};
+        std::printf("Resolution: scene %ux%u, frame %ux%u\n", SceneResolution::game_scene.width,
+                    SceneResolution::game_scene.height, SceneResolution::game_frame.width,
+                    SceneResolution::game_frame.height);
+    }
     // Before the rasterizer is bound: Liverpool enqueues buffers only once it sees it.
     draw_prep = std::make_unique<DrawPreparation>(pipeline_cache);
     scene_targets = std::make_unique<SceneTargets>(instance, scheduler, runtime, texture_cache);
@@ -283,12 +296,12 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
         if (camera_motion->Enabled() && db_desc.first && cb_descs[0].first &&
             guest_targets == 1 && regs.depth_control.depth_enable &&
             regs.depth_control.depth_write_enable &&
-            UiComposition::NativeViewport(regs.viewports[0].xscale*2, regs.viewports[0].yscale*2)) {
+            UiComposition::SceneViewport(regs.viewports[0].xscale*2, regs.viewports[0].yscale*2)) {
             const auto& color = texture_cache.GetImage(cb_descs[0].first);
             const auto& depth = texture_cache.GetImage(db_desc.first);
-            gbuffer_draw = depth.info.size.width == 1920 && depth.info.size.height == 1080 &&
+            gbuffer_draw = SceneResolution::IsGameScene(depth.info.size.width, depth.info.size.height) &&
                 depth.info.pixel_format == vk::Format::eD32SfloatS8Uint &&
-                color.info.size.width == 1920 && color.info.size.height == 1080 &&
+                SceneResolution::IsGameScene(color.info.size.width, color.info.size.height) &&
                 (color.info.pixel_format == vk::Format::eR8G8B8A8Unorm ||
                  color.info.pixel_format == vk::Format::eB10G11R11UfloatPack32);
         }
@@ -331,7 +344,7 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
 bool Rasterizer::SceneJitterDepth() {
     if (!Ps4RtSettings::Get().native_scene || !db_desc.first) return false;
     const auto& depth = texture_cache.GetImage(db_desc.first);
-    return depth.info.size.width == 1920 && depth.info.size.height == 1080 &&
+    return SceneResolution::IsGameScene(depth.info.size.width, depth.info.size.height) &&
            depth.info.num_samples == 1;
 }
 
@@ -924,6 +937,174 @@ void Rasterizer::Draw(bool is_indexed, u32 index_offset, const PreparedDraw* pre
 
 
 
+// Ultrawide: pre-rendered movies are 16:9 and the game stretches them over its whole UI layer.
+// A movie draw is recognised by its planar YUV textures, as in the Code Fairy port: an 8-bit
+// luma plane (at least 64 wide) and two 8-bit chroma planes of half its size. Only a movie
+// filling the width of a target wider than its own aspect is boxed.
+void Rasterizer::PrepareMovieBox(const GraphicsPipeline* pipeline) {
+    movie_box.active = false;
+    if (!cb_descs[0].first) return;
+    const auto& regs = Regs();
+    const auto& vp = regs.viewports[0];
+    if (regs.IsClipDisabled() || !regs.viewport_control.xscale_enable ||
+        !regs.viewport_control.yscale_enable || vp.yscale == 0.0f) return;
+    const auto& ci = texture_cache.GetImage(cb_descs[0].first).info;
+    const float target_w = float(ci.size.width), target_h = float(ci.size.height);
+    if (target_w * 9.0f <= target_h * 16.0f + 9.0f) return; // 16:9 or narrower: nothing to do
+    const float vp_w = std::abs(vp.xscale) * 2.0f, vp_h = std::abs(vp.yscale) * 2.0f;
+    if (vp_w < target_w - 1.0f) return; // not stretched over the width
+    u32 w[8], h[8], n = 0;
+    for (const auto* stage : pipeline->GetStages()) {
+        if (!stage || stage->sw_stage != Shader::SwStage::Fragment) continue;
+        for (const auto& im : stage->images) {
+            const auto sharp = im.GetSharp(*stage);
+            if (sharp.GetDataFmt() != AmdGpu::DataFormat::Format8 || n == 8) continue;
+            w[n] = u32(sharp.width) + 1;
+            h[n] = u32(sharp.height) + 1;
+            ++n;
+        }
+    }
+    float aspect = 0.0f;
+    for (u32 y = 0; y < n && aspect == 0.0f; ++y) {
+        u32 half = 0;
+        for (u32 c = 0; c < n; ++c)
+            half += c != y && w[c] == (w[y] + 1) / 2 && h[c] == (h[y] + 1) / 2;
+        if (w[y] >= 64 && half >= 2) aspect = float(w[y]) / float(h[y]);
+    }
+    if (aspect == 0.0f) return;
+    if (std::abs(aspect - 16.0f / 9.0f) < 0.03f) aspect = 16.0f / 9.0f; // coded-size padding
+    const float box_w = vp_h * aspect;
+    if (box_w >= vp_w - 1.0f) return;
+    movie_box = {true, vp.xoffset - box_w * 0.5f, box_w};
+}
+
+// Ultrawide: the UI is a perspective scene whose camera follows the real aspect, so on a 3D frame
+// the HUD stays centred and the world shows more at the sides. Title and menu screens have no 3D
+// scene: their art is laid out for 16:9 (the title art starts at the canvas' left edge) and the
+// stale scene composite shows beside it. On those frames every draw into the UI layer is clipped
+// to the centred 16:9 canvas and the layer's sides are cleared to black once per frame.
+void Rasterizer::PrepareCanvasClip(const GraphicsPipeline* pipeline) {
+    auto& clip = canvas_clip;
+    clip.active = clip.clear = false;
+    if (!cb_descs[0].first) return;
+    const auto& regs = Regs();
+    const u64 vs = pipeline->GetStage(Shader::SwStage::Vertex).pgm_hash;
+    if (db_desc.first && regs.depth_control.depth_enable && regs.depth_control.depth_write_enable &&
+        vs != SakuraScene::FrameUiVs &&
+        texture_cache.GetImage(db_desc.first).info.size.height >= 360) {
+        clip.scene = true; // scene geometry (or its shadows) this frame
+    }
+    const auto& ci = texture_cache.GetImage(cb_descs[0].first).info;
+    const s32 w = s32(ci.size.width), h = s32(ci.size.height);
+    const s32 canvas = s32(std::lround(h * 16.0 / 9.0));
+    if (w <= canvas + 2) return; // 16:9 or narrower
+    if (ci.guest_address == clip.ui_layer &&
+        std::find(std::begin(SakuraScene::HudParticleVs), std::end(SakuraScene::HudParticleVs), vs) !=
+            std::end(SakuraScene::HudParticleVs)) {
+        // HUD particles: their 16:9 projection spread over the wide target puts them twice as
+        // far out (at 32:9) and stretched; the centred 16:9 canvas is where the HUD they belong
+        // to is laid out. (Not other non-UI draws there: the radar's blips are already right.)
+        ui_stretch = float(canvas) / float(w);
+    }
+    if (vs == SakuraScene::FrameUiVs) {
+        clip.ui_layer = ci.guest_address;
+        // Fades and wipes (to and from black, loading backgrounds, the panel sliding over the
+        // screen on scene changes) are untextured colour quads of the full height and at least
+        // the 16:9 canvas' width, wherever they are: stretch them (and their positions) about
+        // the centre over the whole width, as they cover a 16:9 screen. A solid colour cannot
+        // distort; textured art keeps its layout.
+        const auto* fs_info = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+        std::array<float, 4> ndc{};
+        const float c = float(canvas) / float(w), tol = 16.0f / float(w);
+        if (fs_info && UiDrawRect(pipeline, ndc)) {
+            if (fs_info->images.empty() && ndc[2] - ndc[0] > 2.0f * (c - tol) &&
+                ndc[1] < -1.0f + tol && ndc[3] > 1.0f - tol) {
+                ui_stretch = 1.0f / c;
+            }
+            // A full-screen 16:9 picture (1920x1080) covering the canvas (the Battle Report map,
+            // also while it zooms in from 1.1x; still backgrounds) makes this a 16:9 screen even
+            // over a rendered 3D scene: from here on the UI layer's sides are black, as on the
+            // title and menus.
+            u32 tw = 0, th = 0;
+            if (fs_info->images.size() == 1) {
+                const auto sh = fs_info->images[0].GetSharp(*fs_info);
+                tw = u32(sh.width) + 1;
+                th = u32(sh.height) + 1;
+            }
+            const bool covers = ndc[0] < -c + tol && ndc[2] > c - tol && ndc[1] < -1.0f + tol &&
+                                ndc[3] > 1.0f - tol;
+            if (covers && tw == 1920 && th == 1080) clip.backdrop = true;
+            // Other full-screen backgrounds drawn past both edges of the canvas (the sky behind
+            // the broadcast frame in cutscenes, 1000x600 at about 1.09x): overscanned so that no
+            // edge shows on a 16:9 screen, so stretch them over the width. Pictures exactly on
+            // the canvas (the pause menu's grid) do not qualify.
+            if (covers && tw && !(tw == 1920 && th == 1080) && ui_stretch == 1.0f &&
+                ndc[0] < -c - tol && ndc[2] > c + tol) {
+                ui_stretch = 1.0f / c;
+            }
+            // Title screen: a parallax painting authored for 16:9 (no art left of the 16:9
+            // area), marked by its 3388x1656 sky. Its painted layers (format 41, at least 1024
+            // wide) are stretched over the width; the logo and text keep their shape and layout.
+            if (tw == 3388 && th == 1656) clip.title = true;
+            if (clip.title && tw >= 1024 &&
+                u32(fs_info->images[0].GetSharp(*fs_info).GetDataFmt()) == 41) {
+                ui_stretch = 1.0f / c;
+            }
+        }
+    }
+    if (clip.title || (clip.scene && !clip.backdrop) || ci.guest_address != clip.ui_layer) return;
+    clip.x0 = (w - canvas) / 2;
+    clip.x1 = clip.x0 + canvas;
+    clip.active = true;
+    clip.clear = !clip.cleared;
+    clip.cleared = true;
+}
+
+// The 2D UI (and its fades) is drawn as quads in a perspective scene: 192 bytes of constants
+// hold world, view and projection matrices (row vectors, clip w = -view z; the projection's x
+// scale follows the real aspect). Vertex position is attribute 0 (x, y and optionally z).
+bool Rasterizer::UiDrawRect(const GraphicsPipeline* pipeline, std::array<float, 4>& ndc) const {
+    const auto& vsi = pipeline->GetStage(Shader::SwStage::Vertex);
+    const float* m = nullptr;
+    for (const auto& desc : vsi.buffers) {
+        if (desc.IsSpecial()) continue;
+        const auto b = desc.GetSharp(vsi);
+        if (b.GetSize() != 192 || !b.base_address || !memory->IsValidGpuMapping(b.base_address, 192) ||
+            memory->ClampRangeSize(b.base_address, 192) != 192) continue;
+        const float* c = reinterpret_cast<const float*>(b.base_address);
+        if (c[32 + 11] == -1.0f && c[32 + 15] == 0.0f) { m = c; break; } // perspective
+    }
+    const auto& fetch = pipeline->GetFetchShader();
+    if (!m || !fetch) return false;
+    for (const auto& attrib : fetch->attributes) {
+        if (attrib.semantic != 0 || attrib.num_elements < 2) continue;
+        const auto b = attrib.GetSharp(vsi);
+        const u32 stride = b.GetStride(), records = b.num_records;
+        const u64 bytes = u64(stride) * records;
+        if (stride < 8 || !records || records > 4096 || !b.base_address ||
+            !memory->IsValidGpuMapping(b.base_address, bytes) ||
+            memory->ClampRangeSize(b.base_address, bytes) != bytes) return false;
+        const auto mul = [](const float* v, const float* mat, float* out) { // out = v * mat
+            for (int c = 0; c < 4; ++c)
+                out[c] = v[0] * mat[c] + v[1] * mat[4 + c] + v[2] * mat[8 + c] + v[3] * mat[12 + c];
+        };
+        ndc = {1e9f, 1e9f, -1e9f, -1e9f};
+        for (u32 r = 0; r < records; ++r) {
+            const float* v = reinterpret_cast<const float*>(b.base_address + u64(r) * stride);
+            const float pos[4] = {v[0], v[1], attrib.num_elements > 2 ? v[2] : 0.0f, 1.0f};
+            float world[4], view[4], clip[4];
+            mul(pos, m, world);
+            mul(world, m + 16, view);
+            mul(view, m + 32, clip);
+            if (!(clip[3] > 1e-6f)) return false;
+            const float x = clip[0] / clip[3], y = clip[1] / clip[3];
+            ndc = {std::min(ndc[0], x), std::min(ndc[1], y), std::max(ndc[2], x), std::max(ndc[3], y)};
+        }
+        return true;
+    }
+    return false;
+}
+
 void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw* used_prepared,
                             bool is_indexed, u32 index_offset) {
     if (DrawPipe::OnStageB()) {
@@ -938,7 +1119,10 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         regs.color_control.mode != AmdGpu::ColorControl::OperationMode::Disable &&
         regs.color_target_mask.GetMask(0) && regs.color_buffers[0] &&
         DisplayRegistry::IsDisplayBuffer(regs.color_buffers[0].Address());
-    if (writes_display) ;
+    if (writes_display) {
+        // The finished frame goes to a display buffer: the next draws start a new frame.
+        canvas_clip.scene = canvas_clip.cleared = canvas_clip.backdrop = canvas_clip.title = false;
+    }
     // CUSA16429 has no template-runtime scene copy: its first draw into the other display buffer
     // starts a frame (HUD draws into the same buffer follow it).
     const bool frame_start = writes_display && (!Ps4RtSettings::Get().native_scene ||
@@ -992,7 +1176,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         const auto& viewport = Regs().viewports[0];
         upscaler->OnDraw(pipeline->GetStage(Shader::SwStage::Vertex).pgm_hash,
                          cb_descs[0].first, db_desc.first,
-                         UiComposition::NativeViewport(viewport.xscale * 2, viewport.yscale * 2),
+                         UiComposition::SceneViewport(viewport.xscale * 2, viewport.yscale * 2),
                          regs.blend_control[0].enable && !regs.color_buffers[0].info.blend_bypass,
                          pipeline->GetStage(Shader::SwStage::Fragment).pgm_hash);
     }
@@ -1007,6 +1191,15 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     if (!bound) {
         return;
     }
+    // ps4rt: graphics preset Lowest with an upscaler keeps the game's outlines pass for the
+    // upscaler's inputs (PostEdge's scene colour, depth and camera, taken above); its composite
+    // is left out, the picture Lowest gives without one (ps4rt_effects.h).
+    if (Ps4RtEffects::OutlinePassHidden() && pipeline->GetStages()[u32(Shader::SwStage::Fragment)] &&
+        pipeline->GetStage(Shader::SwStage::Fragment).pgm_hash == SakuraScene::PostEdgeFs) {
+        return;
+    }
+    PrepareMovieBox(pipeline);
+    PrepareCanvasClip(pipeline);
     const auto state = BeginRendering(pipeline);
     
 
@@ -1125,6 +1318,28 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     UpdateDynamicState(pipeline, is_indexed);
     ;
     scheduler.BeginRendering(state);
+    if ((movie_box.active || canvas_clip.clear) && state.num_color_attachments > 0) {
+        // Black bars beside the movie or the 16:9 canvas (the target may hold anything there).
+        const s32 w = s32(state.width);
+        const float left = movie_box.active ? movie_box.x : float(canvas_clip.x0);
+        const float right = movie_box.active ? movie_box.x + movie_box.width : float(canvas_clip.x1);
+        const s32 x0 = std::clamp(s32(std::lround(left * target_scale[0])), 0, w);
+        const s32 x1 = std::clamp(s32(std::lround(right * target_scale[0])), x0, w);
+        std::array<vk::ClearRect, 2> rects{};
+        u32 n = 0;
+        if (x0 > 0) rects[n++] = vk::ClearRect{vk::Rect2D{{0, 0}, {u32(x0), state.height}}, 0, 1};
+        if (x1 < w) rects[n++] = vk::ClearRect{vk::Rect2D{{x1, 0}, {u32(w - x1), state.height}}, 0, 1};
+        if (n) {
+            const vk::ClearAttachment black{vk::ImageAspectFlagBits::eColor, 0,
+                                            vk::ClearColorValue{std::array{0.0f, 0.0f, 0.0f, 1.0f}}};
+            scheduler.Record([=](vk::CommandBuffer cmdbuf) {
+                cmdbuf.clearAttachments(black, vk::ArrayProxy<const vk::ClearRect>(n, rects.data()));
+            });
+        }
+    }
+    movie_box.active = false; // the viewport was set above
+    canvas_clip.active = canvas_clip.clear = false;
+    ui_stretch = 1.0f;
 
     const auto& vs_info = pipeline->GetStage(Shader::SwStage::Vertex);
     const auto& fetch_shader = pipeline->GetFetchShader();
@@ -1211,7 +1426,7 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
         const auto& viewport = regs.viewports[0];
         upscaler->OnDraw(pipeline->GetStage(Shader::SwStage::Vertex).pgm_hash,
                          cb_descs[0].first, db_desc.first,
-                         UiComposition::NativeViewport(viewport.xscale * 2, viewport.yscale * 2),
+                         UiComposition::SceneViewport(viewport.xscale * 2, viewport.yscale * 2),
                          regs.blend_control[0].enable && !regs.color_buffers[0].info.blend_bypass,
                          pipeline->GetStage(Shader::SwStage::Fragment).pgm_hash);
     }
@@ -3366,6 +3581,14 @@ void Rasterizer::UpdateViewportScissorState() const {
             viewport.y = (yoffset - yscale) * target_scale[1] + draw_jitter[1];
             viewport.width = xscale * 2.0f * target_scale[0];
             viewport.height = yscale * 2.0f * target_scale[1];
+            if (i == 0 && movie_box.active) { // ultrawide: the movie's centred box
+                viewport.x = movie_box.x * target_scale[0];
+                viewport.width = movie_box.width * target_scale[0];
+            }
+            if (i == 0 && ui_stretch != 1.0f) { // ultrawide: canvas-sized quad over the width
+                viewport.x = (xoffset - xscale * ui_stretch) * target_scale[0];
+                viewport.width = xscale * 2.0f * ui_stretch * target_scale[0];
+            }
         }
 
         viewports.push_back(viewport);
@@ -3396,6 +3619,19 @@ void Rasterizer::UpdateViewportScissorState() const {
                 .offset = {vp_scsr.top_left_x, vp_scsr.top_left_y},
                 .extent = {vp_scsr.GetWidth(), vp_scsr.GetHeight()},
             });
+        }
+    }
+
+    // ultrawide: 2D screen drawn within the 16:9 canvas. Stretched solid-colour fills (the SEGA
+    // logo's white, fades) still cover the whole width: a flat colour cannot distort.
+    if (canvas_clip.active && ui_stretch == 1.0f) {
+        const s32 cx0 = s32(std::lround(canvas_clip.x0 * target_scale[0]));
+        const s32 cx1 = s32(std::lround(canvas_clip.x1 * target_scale[0]));
+        for (auto& scissor : scissors) {
+            const s32 x0 = std::max(scissor.offset.x, cx0);
+            const s32 x1 = std::min(scissor.offset.x + s32(scissor.extent.width), cx1);
+            scissor.offset.x = x0;
+            scissor.extent.width = u32(std::max(x1 - x0, 0));
         }
     }
 
