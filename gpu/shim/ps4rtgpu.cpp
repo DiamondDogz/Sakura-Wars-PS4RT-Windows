@@ -316,7 +316,7 @@ static thread_local volatile unsigned long long new_buffer_lo = 0, new_buffer_hi
 // faults on GPU-written pages, and each used to download the GPU bytes around it and wait for
 // the GPU (Scheduler::Finish: 50 FPS and a slowed game at 4K). The old GPU bytes under the new
 // buffer are dead, so the fault drops them instead (BufferCache::ReadMemory).
-extern "C" void* ps4rtgpu_new_buffer_copy(void* dst, const void* src, uint64_t size) {
+extern "C" PS4RTGPU_GUEST_ABI void* ps4rtgpu_new_buffer_copy(void* dst, const void* src, uint64_t size) {
     if (auto* memory = Core::Memory::Instance(); memory && memory->GetRasterizer() && size) {
         // Asynchronous downloads queued before must not land on the new data.
         memory->GetRasterizer()->GetBufferCache().DropPendingAsync(
@@ -337,7 +337,8 @@ extern "C" void* ps4rtgpu_new_buffer_copy(void* dst, const void* src, uint64_t s
 // covers the whole surface rewrites all of its pixels, so any GPU data in its bytes is dead:
 // the write faults inside skip the GPU wait like the new-buffer copies above (the padding
 // pixels the loop skips are never sampled).
-using TileRegionLoop = int (*)(const void*, void*, const void*, const uint32_t*, uint32_t,
+// The game's region loop: System V calling convention.
+using TileRegionLoop = int (PS4RTGPU_GUEST_ABI *)(const void*, void*, const void*, const uint32_t*, uint32_t,
                                uint32_t);
 static TileRegionLoop tile_region_loop = nullptr;
 
@@ -387,7 +388,7 @@ static int TileSurfaceRegion(TileRegionLoop loop, const void* params, void* dst,
     return result;
 }
 
-extern "C" int ps4rtgpu_tile_surface_region(const void* params, void* dst, const void* src,
+extern "C" PS4RTGPU_GUEST_ABI int ps4rtgpu_tile_surface_region(const void* params, void* dst, const void* src,
                                             const uint32_t* region, uint32_t src_pitch,
                                             uint32_t src_slice_pitch) {
     return TileSurfaceRegion(tile_region_loop, params, dst, src, region, src_pitch,
@@ -401,7 +402,7 @@ extern "C" void ps4rtgpu_set_tile_region_2d(uintptr_t loop) {
     tile_region_loop_2d = reinterpret_cast<TileRegionLoop>(loop);
 }
 
-extern "C" int ps4rtgpu_tile_surface_region_2d(const void* params, void* dst, const void* src,
+extern "C" PS4RTGPU_GUEST_ABI int ps4rtgpu_tile_surface_region_2d(const void* params, void* dst, const void* src,
                                                const uint32_t* region, uint32_t src_pitch,
                                                uint32_t src_slice_pitch) {
     return TileSurfaceRegion(tile_region_loop_2d, params, dst, src, region, src_pitch,
