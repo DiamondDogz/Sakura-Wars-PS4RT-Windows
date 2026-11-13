@@ -1,6 +1,6 @@
 # Sakura-Wars-PS4RT-Windows
 
-Windows port of [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), built from tag **v1.1**, commit `29f8822014e8d55d110476088191634f23bc9ce2`. That tag is the code on upstream `main`. The two commits after it on `main` are documents only. The branch `windows` is the default branch.
+Windows port of [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), built from tag **v1.2**, commit `b45cfaa`, with the Windows changes it needs. The branch `windows` is the default branch.
 
 Published by [DiamondDogz](https://github.com/DiamondDogz). The launcher is `Kagekidan.exe`.
 
@@ -8,7 +8,7 @@ The earlier Windows release, [windows-1.0](https://github.com/DiamondDogz/Sakura
 
 Unofficial. Not affiliated with SEGA. The game is not included.
 
-Download: [windows-1.1.5](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.5). That archive starts the game. It is windows-1.1.4 with a new runtime: with [Crowbar](https://github.com/DiamondDogz/crowbar), the Guide button pauses the game (`src/runtime_crowbar_pause.c`). windows-1.1.4 was windows-1.1.3 with a game language choice in the launcher. An old NVIDIA driver no longer closes the game on the shader-cache check: the game compiles shaders the normal way instead. The picture does not change. In the game, Insert opens the overlay. Graphics preset is there: Max, High, Medium, Lowest.
+Download: [windows-1.2](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.2). It brings upstream v1.2 to Windows: trophies recorded by the game with their own tab and notification in the overlay, a Game language option in the overlay (Kagekidan's Language choice still works), internal resolutions and experimental ultrawide, FSR 1, FSR fixes, F12 screenshots. With [Crowbar](https://github.com/DiamondDogz/crowbar), the Guide button pauses the game, Quit closes it cleanly, and Crowbar's trophy test profile can unlock a trophy through the runtime (crowbar-sdk 1.4). The Kagekidan launcher is that of windows-1.1.4. In the game, Insert opens the overlay.
 
 [windows-1.1.3](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.3) is the earlier experimental build, with local trophies only. Nothing is sent.
 

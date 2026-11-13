@@ -1,12 +1,12 @@
 # Sakura-Wars-PS4RT-Windows
 
-Portage Windows de [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), d’après le tag **v1.1**. C’est le code de `main` en amont. Les deux commits suivants sur `main` ne sont que des textes. Publié par [DiamondDogz](https://github.com/DiamondDogz). Le lanceur est `Kagekidan.exe`.
+Portage Windows de [Sakura-Wars-PS4RT](https://github.com/HekamiAeon/Sakura-Wars-PS4RT), d’après le tag **v1.2**, commit `b45cfaa`, avec les changements nécessaires à Windows. Publié par [DiamondDogz](https://github.com/DiamondDogz). Le lanceur est `Kagekidan.exe`.
 
 La release précédente, [windows-1.0](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.0), suit la v1.0. Cette branche non. Ce n’est pas non plus la version du jeu : le jeu doit être en **01.01**.
 
 Non officiel. Aucun lien avec SEGA. Le jeu n’est pas inclus.
 
-Téléchargement : [windows-1.1.5](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.5). Cette archive démarre le jeu. C’est windows-1.1.4 avec un nouveau runtime : avec [Crowbar](https://github.com/DiamondDogz/crowbar), le bouton Guide met le jeu en pause (`src/runtime_crowbar_pause.c`). windows-1.1.4 était windows-1.1.3, avec le choix de la langue du jeu dans le lanceur. Un vieux pilote NVIDIA ne ferme plus le jeu au contrôle du cache de shaders : le jeu les compile normalement. L’image ne change pas. En jeu, Insert ouvre l’incrustation. Le préréglage graphique y est : Max, High, Medium, Lowest.
+Téléchargement : [windows-1.2](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.2). Elle apporte la v1.2 sous Windows : trophées notés par le jeu, avec leur onglet et leur notification dans l’incrustation, une option de langue du jeu dans l’incrustation (le choix de langue de Kagekidan marche toujours), résolutions internes et ultra-large expérimental, FSR 1, corrections FSR, captures avec F12. Avec [Crowbar](https://github.com/DiamondDogz/crowbar), le bouton Guide met le jeu en pause, Quitter le ferme proprement, et le profil de test des trophées peut débloquer un trophée par le runtime (crowbar-sdk 1.4). Le lanceur Kagekidan est celui de windows-1.1.4. En jeu, Insert ouvre l’incrustation.
 
 [windows-1.1.3](https://github.com/DiamondDogz/Sakura-Wars-PS4RT-Windows/releases/tag/windows-1.1.3) est l’essai précédent, avec seulement les trophées en local. Rien n’est envoyé.
 
