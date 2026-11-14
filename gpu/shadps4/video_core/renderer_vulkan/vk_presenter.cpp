@@ -34,6 +34,7 @@
 #include <csetjmp>
 #include <cstring>
 #include <ctime>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -210,8 +211,23 @@ bool ScreenshotToRgba8(const u8* src, u32 width, u32 height, vk::Format format, 
     }
 }
 
+/// Crowbar (crowbar-sdk 1.5) gives each game a captures folder in PS4RT_CAPTURE_DIR and shows
+/// what lands there in its Captures gallery; without it, the user folder's gpu/screenshots/.
+std::filesystem::path ScreenshotDir() {
+#ifdef _WIN32
+    if (const wchar_t* crowbar = _wgetenv(L"PS4RT_CAPTURE_DIR"); crowbar && *crowbar) {
+        return std::filesystem::path(crowbar);
+    }
+#else
+    if (const char* crowbar = std::getenv("PS4RT_CAPTURE_DIR"); crowbar && *crowbar) {
+        return std::filesystem::path(crowbar);
+    }
+#endif
+    return Common::FS::GetUserPath(Common::FS::PathType::ScreenshotsDir);
+}
+
 std::filesystem::path ScreenshotPath() {
-    const auto& dir = Common::FS::GetUserPath(Common::FS::PathType::ScreenshotsDir);
+    const auto dir = ScreenshotDir();
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     std::string serial{Common::ElfInfo::Instance().GameSerial()};
@@ -281,14 +297,26 @@ void CaptureScreenshot(const Instance& instance, Scheduler& scheduler, vk::Comma
                                                                &png_size, 6, MZ_FALSE);
         bool saved = false;
         if (png) {
+            // Written under a temporary name, then renamed: a gallery watching the folder never
+            // sees half a picture (crowbar-sdk 1.5).
+            auto part = path;
+            part += ".part";
 #ifdef _WIN32
-            FILE* f = _wfopen(path.wstring().c_str(), L"wb"); // the user folder may not be ASCII
+            FILE* f = _wfopen(part.wstring().c_str(), L"wb"); // the user folder may not be ASCII
 #else
-            FILE* f = std::fopen(path.c_str(), "wb");
+            FILE* f = std::fopen(part.c_str(), "wb");
 #endif
             if (f) {
                 saved = std::fwrite(png, 1, png_size, f) == png_size;
                 saved = std::fclose(f) == 0 && saved;
+                std::error_code ec;
+                if (saved) {
+                    std::filesystem::rename(part, path, ec);
+                    saved = !ec;
+                }
+                if (!saved) {
+                    std::filesystem::remove(part, ec);
+                }
             }
             mz_free(png);
         }
