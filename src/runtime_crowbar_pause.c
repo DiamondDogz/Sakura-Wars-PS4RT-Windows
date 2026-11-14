@@ -11,6 +11,8 @@
  * so the game does not see the pause as a long frame. Without PS4RT_CONTROL_DIR nothing runs. */
 #define _GNU_SOURCE
 #include "runtime.h"
+
+int ps4rtgpu_capture_named(const char *stem); /* gpu/ps4rtgpu.h */
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -121,6 +123,13 @@ static void *watch(void *unused) {
         } else if (!strcmp(word, "unlock")) {
             /* Crowbar's test profile: a trophy unlocked as if the game had (crowbar-sdk 1.3). */
             write_state(seq, runtime_crowbar_unlock(arg) == 0 ? "unlocked" : "refused");
+        } else if (!strcmp(word, "capture")) {
+            /* A screenshot of the next game frame, without the overlay, saved as
+               trophy-<id>-<seq>.png in PS4RT_CAPTURE_DIR (crowbar-sdk 1.6: Crowbar asks for one
+               when trophy <id> unlocks). */
+            char stem[48];
+            snprintf(stem, sizeof(stem), "trophy-%d-%ld", arg, seq);
+            write_state(seq, ps4rtgpu_capture_named(stem) == 0 ? "capturing" : "refused");
         } else if (!strcmp(word, "quit")) {
             /* The player quit from Crowbar (crowbar-sdk 1.4): trophy state is already on disk,
              * the game's saves are its own. Leave at once with code 0. */

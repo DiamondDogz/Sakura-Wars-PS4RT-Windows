@@ -226,7 +226,7 @@ std::filesystem::path ScreenshotDir() {
     return Common::FS::GetUserPath(Common::FS::PathType::ScreenshotsDir);
 }
 
-std::filesystem::path ScreenshotPath() {
+std::filesystem::path ScreenshotPath(const std::string& stem) {
     const auto dir = ScreenshotDir();
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
@@ -244,6 +244,9 @@ std::filesystem::path ScreenshotPath() {
 #endif
     const auto ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
+    if (!stem.empty()) {
+        return dir / (stem + ".png");
+    }
     char name[96];
     std::snprintf(name, sizeof(name), "%s_%04d%02d%02d_%02d%02d%02d_%03d.png", serial.c_str(),
                   local.tm_year + 1900, local.tm_mon + 1, local.tm_mday, local.tm_hour, local.tm_min,
@@ -254,7 +257,7 @@ std::filesystem::path ScreenshotPath() {
 /// Records the copy of the frame's image (layout TransferSrcOptimal) and saves it once the GPU
 /// is done with this submission.
 void CaptureScreenshot(const Instance& instance, Scheduler& scheduler, vk::CommandBuffer cmdbuf,
-                       const Frame& frame) {
+                       const Frame& frame, const std::string& stem) {
     const VkBufferCreateInfo buffer_ci{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
                                        .size = VkDeviceSize(frame.width) * frame.height * 4,
                                        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT};
@@ -281,7 +284,7 @@ void CaptureScreenshot(const Instance& instance, Scheduler& scheduler, vk::Comma
                            vk::DependencyFlags{}, to_host, {}, {});
     scheduler.DeferPriorityOperation([allocator = instance.GetAllocator(), buffer, allocation, info,
                                       width = frame.width, height = frame.height, format = frame.format,
-                                      hdr = frame.is_hdr, path = ScreenshotPath()] {
+                                      hdr = frame.is_hdr, path = ScreenshotPath(stem)] {
         vmaInvalidateAllocation(allocator, allocation, 0, VK_WHOLE_SIZE);
         std::vector<u8> rgba;
         const bool converted =
@@ -946,7 +949,7 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
                          MakeImageBlitFit(frame->width, frame->height, extent.width, extent.height),
                          vk::Filter::eLinear);
         if (Ps4RtScreenshot::Consume() != 0) {
-            CaptureScreenshot(instance, scheduler, cmdbuf, *frame);
+            CaptureScreenshot(instance, scheduler, cmdbuf, *frame, Ps4RtScreenshot::TakeName());
         }
         // ps4rt: the settings menu / FPS counter over the frame, at display resolution.
         const bool overlay = Ps4RtOverlay::Visible();

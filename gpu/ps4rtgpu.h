@@ -58,6 +58,8 @@ int ps4rtgpu_overlay_captures_input(void);
 void ps4rtgpu_trophy_card(int32_t id);
 /* Controller vibration strength set in the menu, 0 (off) to 100 (the game's own). */
 int ps4rtgpu_vibration_percent(void);
+/* Saves the next game frame as <stem>.png in the captures folder (Crowbar, crowbar-sdk 1.6). */
+int ps4rtgpu_capture_named(const char *stem);
 /* Number of symbols registered by the vendored libraries (diagnostics). */
 unsigned ps4rtgpu_symbol_count(void);
 #ifdef __cplusplus
